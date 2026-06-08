@@ -29,16 +29,61 @@ def build_feasibility_graph(
     Edge (r, d) exists ONLY IF riders[r]['wtp'] >= drivers[d]['maf'].
 
     Edge attributes:
-      - 'travel_cost': get_travel_cost(city_graph, driver.current_zone, rider.origin_zone)
-      - 'price_lb': drivers[d]['maf']       (lower bound of feasible price interval)
-      - 'price_ub': riders[r]['wtp']        (upper bound of feasible price interval)
+      - 'travel_cost': get_travel_cost(city_graph,
+                                       driver.current_zone,
+                                       rider.origin_zone)
+
+      - 'price_lb': drivers[d]['maf']
+      - 'price_ub': riders[r]['wtp']
 
     Args:
-        riders: List of rider dicts with keys {id, origin_zone, dest_zone, wtp}.
-        drivers: List of driver dicts with keys {id, current_zone, maf}.
-        city_graph: nx.DiGraph with edge attribute 'cost'.
+        riders: List of rider dictionaries.
+        drivers: List of driver dictionaries.
+        city_graph: City graph with travel costs.
 
     Returns:
-        nx.Graph (bipartite) with rider and driver nodes and feasible edges.
+        nx.Graph (bipartite)
     """
-    raise NotImplementedError("TODO: Person A — implement feasibility filter")
+
+    G = nx.Graph()
+
+    # Add rider nodes
+    for rider in riders:
+        G.add_node(
+            ("rider", rider["id"]),
+            bipartite=0,
+            data=rider
+        )
+
+    # Add driver nodes
+    for driver in drivers:
+        G.add_node(
+            ("driver", driver["id"]),
+            bipartite=1,
+            data=driver
+        )
+
+    # Add feasible rider-driver edges
+    for rider in riders:
+        for driver in drivers:
+
+            # Two-sided feasibility condition
+            if rider["wtp"] >= driver["maf"]:
+
+                travel_cost = get_travel_cost(
+                    city_graph,
+                    driver["current_zone"],
+                    rider["origin_zone"]
+                )
+
+                G.add_edge(
+                    ("rider", rider["id"]),
+                    ("driver", driver["id"]),
+                    travel_cost=travel_cost,
+                    price_lb=driver["maf"],
+                    price_ub=rider["wtp"],
+                    origin_zone=rider["origin_zone"],
+                    dest_zone=rider["dest_zone"]
+                )
+
+    return G
