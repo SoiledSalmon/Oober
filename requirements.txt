@@ -1,0 +1,6 @@
+pulp
+networkx
+numpy
+pandas
+streamlit
+plotly
