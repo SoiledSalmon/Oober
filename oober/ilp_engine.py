@@ -20,8 +20,65 @@ def solve_joint_opt(
     fairness_tolerance: float = 0.30,
     window_id: int = 0
 ) -> dict:
+    """Solve the joint assignment-and-pricing ILP.
 
-    start_time = time.time()
+    Decision variables
+    ------------------
+    x_rd : binary
+        1 if rider *r* is matched with driver *d*, 0 otherwise.
+    p_rd : continuous (>= 0)
+        Price paid by rider *r* to driver *d* when matched.
+
+    Objective
+    ---------
+    Minimize total travel cost:
+        min  Σ_{(r,d)∈E}  travel_cost(r,d) · x_rd
+
+    Constraints
+    -----------
+    1. **Assignment** – each rider matched to at most one driver;
+       each driver matched to at most one rider.
+    2. **Feasibility** – price must lie within the edge's
+       [price_lb, price_ub] when the pair is matched.
+    3. **Stability** – if a corridor has a remembered price, the
+       new price stays within ±delta of that price.
+    4. **Fairness** – every driver's per-trip earnings stay within
+       ±fairness_tolerance of the market-wide midpoint average.
+
+    Parameters
+    ----------
+    feasibility_graph : nx.Graph
+        Undirected bipartite graph whose nodes are
+        ``('rider', rid)`` / ``('driver', did)`` tuples and whose
+        edges carry ``travel_cost``, ``price_lb``, ``price_ub``,
+        ``origin_zone``, and ``dest_zone`` attributes.
+    price_memory : dict
+        Maps ``(origin_zone, dest_zone)`` corridors to the last
+        accepted price, used by stability constraints.
+    earnings_history : dict
+        Historical per-driver earnings (reserved for future use).
+    delta : float
+        Maximum fractional deviation from the remembered corridor
+        price (stability constraint).  Default 0.10 (±10 %).
+    fairness_tolerance : float
+        Maximum fractional deviation from the market-average
+        earnings per trip (fairness constraint).  Default 0.30
+        (±30 %).
+    window_id : int
+        Identifier for the current scheduling window.
+
+    Returns
+    -------
+    dict
+        ``assignments``      – list of ``(rid, did, price)`` tuples
+        ``total_wait_cost``  – float, sum of travel costs for
+                               matched pairs
+        ``matched_count``    – int, number of matched pairs
+        ``solver_status``    – str, PuLP solver status
+        ``solve_time_sec``   – float, wall-clock seconds
+    """
+
+    start_time = time.perf_counter()
 
     prob = pulp.LpProblem(
         "JointOpt",
@@ -43,7 +100,8 @@ def solve_joint_opt(
             driver_nodes.append(node)
 
     # Create decision variables
-    for r_node, d_node in feasibility_graph.edges():
+    for u, v in feasibility_graph.edges():
+        r_node, d_node = (u, v) if u[0] == 'rider' else (v, u)
 
         rid = r_node[1]
         did = d_node[1]
@@ -60,9 +118,10 @@ def solve_joint_opt(
 
     # Objective Function
     prob += pulp.lpSum(
-        feasibility_graph[r][d]["travel_cost"]
-        * x[(r[1], d[1])]
-        for r, d in feasibility_graph.edges()
+        feasibility_graph[r_node][d_node]["travel_cost"]
+        * x[(r_node[1], d_node[1])]
+        for u, v in feasibility_graph.edges()
+        for r_node, d_node in [((u, v) if u[0] == 'rider' else (v, u))]
     )
 
     # Assignment Constraints
@@ -96,7 +155,8 @@ def solve_joint_opt(
         prob += pulp.lpSum(driver_vars) <= 1
 
     # Feasibility Constraints
-    for r_node, d_node in feasibility_graph.edges():
+    for u, v in feasibility_graph.edges():
+        r_node, d_node = (u, v) if u[0] == 'rider' else (v, u)
 
         rid = r_node[1]
         did = d_node[1]
@@ -114,7 +174,8 @@ def solve_joint_opt(
         )
 
     # Stability Constraints
-    for r_node, d_node in feasibility_graph.edges():
+    for u, v in feasibility_graph.edges():
+        r_node, d_node = (u, v) if u[0] == 'rider' else (v, u)
 
         rid = r_node[1]
         did = d_node[1]
@@ -219,7 +280,8 @@ def solve_joint_opt(
 
     if status in ["Optimal", "Feasible"]:
 
-        for r_node, d_node in feasibility_graph.edges():
+        for u, v in feasibility_graph.edges():
+            r_node, d_node = (u, v) if u[0] == 'rider' else (v, u)
 
             rid = r_node[1]
             did = d_node[1]
@@ -244,7 +306,7 @@ def solve_joint_opt(
                     feasibility_graph[r_node][d_node]["travel_cost"]
                 )
 
-    solve_time = time.time() - start_time
+    solve_time = time.perf_counter() - start_time
 
     return {
         "assignments": assignments,

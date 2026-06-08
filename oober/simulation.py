@@ -219,7 +219,7 @@ def run_simulation(
             num_riders=num_riders,
             num_drivers=num_drivers,
             num_zones=num_zones,
-            seed=window_seed,
+            seed=window_seed + 1,  # offset to avoid RNG correlation with win_rng
         )
 
         # 2. Build feasibility graph (shared input for both systems)
@@ -247,7 +247,7 @@ def run_simulation(
             }
 
         # Handle non-Optimal solver status gracefully
-        if jo_result["solver_status"] not in ("Optimal", "Greedy", "Error"):
+        if jo_result["solver_status"] not in ("Optimal", "Feasible", "Greedy", "Error"):
             print(f"[WARN] JointOpt non-optimal on window {window_id}: "
                   f"{jo_result['solver_status']}")
             jo_result["assignments"] = []
@@ -264,14 +264,14 @@ def run_simulation(
 
         # ── 5. Compute metrics ───────────────────────────────────────────────
         jo_wait = compute_wait_time(jo_result["assignments"], feas_graph)
-        jo_ev = compute_earnings_variance(jo_result["assignments"])
+        jo_ev = compute_earnings_variance(jo_result["assignments"], drivers)
         jo_pd = compute_price_deviation(
             jo_result["assignments"], jo_price_memory, riders, delta
         )
         jo_mr = compute_matching_rate(jo_result["assignments"], num_riders)
 
         sb_wait = compute_wait_time(sb_result["assignments"], feas_graph)
-        sb_ev = compute_earnings_variance(sb_result["assignments"])
+        sb_ev = compute_earnings_variance(sb_result["assignments"], drivers)
         sb_pd = compute_price_deviation(
             sb_result["assignments"], sb_price_memory, riders, delta
         )

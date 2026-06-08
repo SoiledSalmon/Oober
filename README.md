@@ -4,13 +4,13 @@
 
 Replaces the industry-standard sequential *surge-price-then-match* pipeline with a **single-pass Integer Linear Program (ILP)** that simultaneously finds optimal driver-rider assignments and prices, subject to wait-time efficiency, driver earnings fairness, and price stability constraints.
 
-## Team
+## Team & Module Status
 
-| Person | Role | Files |
-|---|---|---|
-| **Person A** | Algorithm Core | `feasibility_filter.py`, `ilp_engine.py` |
-| **Person B** | Data & Baseline | `city_graph.py`, `simulation.py`, `sequential_baseline.py` |
-| **Person C** | UI & Integration | `app.py`, `metrics.py` |
+| Person | Role | Files | Status |
+|---|---|---|---|
+| **Person A** | Algorithm Core | `feasibility_filter.py`, `ilp_engine.py` | ✅ Completed |
+| **Person B** | Data & Baseline | `city_graph.py`, `simulation.py`, `sequential_baseline.py` | ✅ Completed |
+| **Person C** | UI & Integration | `app.py`, `metrics.py` | ⏳ Pending (Stubs) |
 
 ## Setup
 
@@ -60,20 +60,31 @@ streamlit run app.py
 
 ```
 oober/
-├── app.py                    # Streamlit dashboard (Person C)
-├── city_graph.py             # Zone graph + travel cost queries (Person B)
-├── feasibility_filter.py     # Two-sided acceptance filter (Person A)
-├── ilp_engine.py             # Full ILP formulation via PuLP (Person A)
-├── sequential_baseline.py    # SeqBaseline implementation (Person B)
-├── simulation.py             # Synthetic data generator + harness (Person B)
-└── metrics.py                # Evaluation metric calculations (Person C)
+├── app.py                    # Streamlit dashboard (Person C - Stub)
+├── city_graph.py             # Zone graph + travel cost queries (Person B - Complete)
+├── feasibility_filter.py     # Two-sided acceptance filter (Person A - Complete)
+├── ilp_engine.py             # Full ILP formulation via PuLP (Person A - Complete)
+├── sequential_baseline.py    # SeqBaseline implementation (Person B - Complete)
+├── simulation.py             # Synthetic data generator + harness (Person B - Complete)
+└── metrics.py                # Evaluation metric calculations (Person C - Stub)
+```
+
+For detailed instructions on completing Person C's components and testing them, refer to the [Developer Implementation Guide](file:///D:/Coding%20Projects/College%20Era/Oober/docs/person_c_guide.md).
+
+## Running Unit Tests
+
+A unit test suite is available to verify the evaluation metric calculations. Run the tests using:
+
+```bash
+python -m unittest tests/test_metrics.py
 ```
 
 ## Quick Test Checklist
 
 - [ ] `python -c "import pulp, networkx, streamlit, plotly"` — no import errors
-- [ ] City graph builds without error on 10 zones
+- [ ] City graph builds without error on 10 zones (`python oober/city_graph.py`)
 - [ ] Feasibility filter produces ~60% feasible pairs on 20-rider/20-driver instance
 - [ ] ILP solves to `Optimal` status on 20-rider/20-driver instance
-- [ ] Sequential baseline produces assignments on same input
-- [ ] `streamlit run app.py` opens in browser and all charts populate
+- [ ] Sequential baseline produces assignments on same input (`python oober/sequential_baseline.py`)
+- [ ] Metric tests pass after Person C's implementation (`python -m unittest tests/test_metrics.py`)
+- [ ] `streamlit run oober/app.py` opens in browser and all charts populate

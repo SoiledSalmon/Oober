@@ -26,7 +26,10 @@ def compute_wait_time(
     raise NotImplementedError("TODO: Person C — implement wait time metric")
 
 
-def compute_earnings_variance(assignments: list[tuple]) -> float:
+def compute_earnings_variance(
+    assignments: list[tuple],
+    drivers: list[dict]
+) -> float:
     """
     For each driver in assignments, compute their total earnings (sum of prices).
     Return variance of per-driver earnings list.
@@ -34,6 +37,7 @@ def compute_earnings_variance(assignments: list[tuple]) -> float:
 
     Args:
         assignments: List of (rider_id, driver_id, price) tuples.
+        drivers: List of driver dictionaries to include unmatched drivers.
 
     Returns:
         Variance of per-driver earnings as a float.

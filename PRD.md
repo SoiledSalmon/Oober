@@ -496,7 +496,7 @@ This table defines exactly what each module passes to the next. If everyone buil
 
 ## 7. Work Division
 
-### Person A — Algorithm Core
+### Person A — Algorithm Core [Status: ✅ COMPLETE]
 **Files:** `feasibility_filter.py`, `ilp_engine.py`  
 **Owns:** The two-sided acceptance constraint, the full ILP formulation, the PuLP setup.
 
@@ -507,7 +507,7 @@ This is the highest-risk, highest-reward role. The ILP is the core of the entire
 
 ---
 
-### Person B — Data & Baseline
+### Person B — Data & Baseline [Status: ✅ COMPLETE]
 **Files:** `city_graph.py`, `simulation.py`, `sequential_baseline.py`  
 **Owns:** The city graph, the data generator, the baseline system, the simulation orchestration loop.
 
@@ -518,7 +518,7 @@ This is the most volume of files but each one is simpler than the ILP. The city 
 
 ---
 
-### Person C — UI & Integration
+### Person C — UI & Integration [Status: ⏳ IN PROGRESS (Stubs Only)]
 **Files:** `app.py`, `metrics.py`  
 **Owns:** The Streamlit dashboard, all four metric calculations, final integration.
 
