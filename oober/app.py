@@ -1,113 +1,295 @@
-"""
-Streamlit Dashboard (Person C)
-
-The demo interface. Runs in the browser. Lets the professor control parameters,
-run the simulation, and view results with interactive charts.
-
-Run with:
-    streamlit run app.py
-"""
-
 import streamlit as st
 import plotly.graph_objects as go
 import pandas as pd
+import time
 
 from simulation import run_simulation
 
-
-# ── Page Config ──────────────────────────────────────────────────────────────
+# --------------------------------------------------
+# Page Config
+# --------------------------------------------------
 
 st.set_page_config(
     page_title="JointOpt Dashboard",
-    page_icon="🚗",
-    layout="wide",
+    layout="wide"
 )
 
 st.title("Joint Price-and-Match Optimization in Ride-Hailing")
-st.caption("DAA PBL — RV College of Engineering, 2025-26")
+
+# --------------------------------------------------
+# Helper Functions
+# --------------------------------------------------
+
+def plot_comparison_chart(
+    title: str,
+    windows: list,
+    joint_values: list,
+    baseline_values: list,
+    y_label: str
+):
+    """Reusable comparison chart."""
+
+    fig = go.Figure()
+
+    fig.add_trace(
+        go.Scatter(
+            x=windows,
+            y=joint_values,
+            mode="lines+markers",
+            name="JointOpt",
+            line=dict(color="blue")
+        )
+    )
+
+    fig.add_trace(
+        go.Scatter(
+            x=windows,
+            y=baseline_values,
+            mode="lines+markers",
+            name="SeqBaseline",
+            line=dict(color="red", dash="dash")
+        )
+    )
+
+    fig.update_layout(
+        title=title,
+        xaxis_title="Time Window",
+        yaxis_title=y_label,
+        height=400
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
 
 
-# ── Sidebar Controls ────────────────────────────────────────────────────────
+# --------------------------------------------------
+# Sidebar
+# --------------------------------------------------
 
 with st.sidebar:
     st.header("Simulation Parameters")
 
-    num_windows = st.slider("Time Windows", 5, 20, 10)
-    delta = st.slider("Price Stability δ", 0.05, 0.30, 0.10)
-    fairness_tol = st.slider("Fairness Tolerance", 0.10, 0.50, 0.30)
-    num_zones = st.slider("City Zones", 5, 15, 10)
-    seed = st.number_input("Random Seed", value=42)
+    num_windows = st.slider(
+        "Time Windows",
+        min_value=5,
+        max_value=20,
+        value=10
+    )
 
-    run_btn = st.button("▶ Run Simulation", type="primary")
+    delta = st.slider(
+        "Price Stability δ",
+        min_value=0.05,
+        max_value=0.30,
+        value=0.10
+    )
 
+    fairness_tol = st.slider(
+        "Fairness Tolerance",
+        min_value=0.10,
+        max_value=0.50,
+        value=0.30
+    )
 
-# ── Run Simulation ──────────────────────────────────────────────────────────
+    num_zones = st.slider(
+        "City Zones",
+        min_value=5,
+        max_value=15,
+        value=10
+    )
+
+    seed = st.number_input(
+        "Random Seed",
+        value=42,
+        step=1
+    )
+
+    st.markdown("---")
+
+    run_btn = st.button(
+        "▶ Run Simulation",
+        type="primary",
+        use_container_width=True
+    )
+
+    st.info(
+        "Adjust parameters and run the simulation "
+        "to compare JointOpt against SeqBaseline."
+    )
+
+# --------------------------------------------------
+# Run Simulation
+# --------------------------------------------------
 
 if run_btn:
     with st.spinner("Running simulation..."):
+
+        start_time = time.time()
+
         results = run_simulation(
             num_windows=num_windows,
             delta=delta,
             fairness_tolerance=fairness_tol,
             num_zones=num_zones,
-            seed=seed,
+            seed=seed
         )
+
+        elapsed = time.time() - start_time
+
         st.session_state["results"] = results
+        st.session_state["runtime"] = elapsed
 
-
-# ── Display Results ─────────────────────────────────────────────────────────
+# --------------------------------------------------
+# Show Results
+# --------------------------------------------------
 
 if "results" in st.session_state:
+
     results = st.session_state["results"]
+    runtime = st.session_state.get("runtime", 0)
+
+    st.success(f"Simulation completed in {runtime:.2f} seconds")
+
     summary = results["summary"]
 
-    tab1, tab2, tab3 = st.tabs(["Overview", "Charts", "Raw Data"])
+    tab1, tab2, tab3 = st.tabs(
+        ["Overview", "Charts", "Raw Data"]
+    )
 
-    # ── Tab 1: Overview ─────────────────────────────────────────────────────
+    # ==================================================
+    # TAB 1 - OVERVIEW
+    # ==================================================
+
     with tab1:
+
+        st.subheader("Performance Summary")
+
         col1, col2, col3, col4 = st.columns(4)
 
         col1.metric(
             "Wait Time Reduction",
-            f"{summary['wait_time_improvement_pct']:.1f}%",
-            "vs SeqBaseline",
+            f"{summary['wait_time_improvement_pct']:.1f}%"
         )
-        # TODO: Person C — add metrics for earnings variance, price deviation,
-        #       and matching rate improvement
 
-    # ── Tab 2: Charts ───────────────────────────────────────────────────────
+        col2.metric(
+            "Earnings Variance Reduction",
+            f"{summary['earnings_variance_improvement_pct']:.1f}%"
+        )
+
+        col3.metric(
+            "Price Stability Improvement",
+            f"{summary['price_deviation_improvement_pct']:.1f}%"
+        )
+
+        col4.metric(
+            "Matching Rate Improvement",
+            f"{summary['matching_rate_improvement_pct']:.1f}%"
+        )
+
+        st.markdown("---")
+
+        st.subheader("Summary Statistics")
+
+        summary_df = pd.DataFrame(
+            summary.items(),
+            columns=["Metric", "Value"]
+        )
+
+        st.dataframe(
+            summary_df,
+            use_container_width=True
+        )
+
+    # ==================================================
+    # TAB 2 - CHARTS
+    # ==================================================
+
     with tab2:
+
         windows = list(range(num_windows))
 
-        # Wait Time chart
-        fig_wait = go.Figure()
-        fig_wait.add_trace(go.Scatter(
-            x=windows,
-            y=results["joint_opt"]["wait_times"],
-            name="JointOpt",
-            line=dict(color="blue"),
-        ))
-        fig_wait.add_trace(go.Scatter(
-            x=windows,
-            y=results["seq_baseline"]["wait_times"],
-            name="SeqBaseline",
-            line=dict(color="red", dash="dash"),
-        ))
-        fig_wait.update_layout(
+        plot_comparison_chart(
             title="Wait Time per Window",
-            xaxis_title="Window",
-            yaxis_title="Total Wait Cost",
+            windows=windows,
+            joint_values=results["joint_opt"]["wait_times"],
+            baseline_values=results["seq_baseline"]["wait_times"],
+            y_label="Total Wait Cost"
         )
-        st.plotly_chart(fig_wait, use_container_width=True)
 
-        # TODO: Person C — add charts for earnings variance, price deviation,
-        #       and matching rate
+        plot_comparison_chart(
+            title="Earnings Variance per Window",
+            windows=windows,
+            joint_values=results["joint_opt"]["earnings_variances"],
+            baseline_values=results["seq_baseline"]["earnings_variances"],
+            y_label="Variance"
+        )
 
-    # ── Tab 3: Raw Data ─────────────────────────────────────────────────────
+        plot_comparison_chart(
+            title="Price Deviation per Window",
+            windows=windows,
+            joint_values=results["joint_opt"]["price_deviations"],
+            baseline_values=results["seq_baseline"]["price_deviations"],
+            y_label="Deviation Rate"
+        )
+
+        plot_comparison_chart(
+            title="Matching Rate per Window",
+            windows=windows,
+            joint_values=results["joint_opt"]["matching_rates"],
+            baseline_values=results["seq_baseline"]["matching_rates"],
+            y_label="Matching Rate"
+        )
+
+    # ==================================================
+    # TAB 3 - RAW DATA
+    # ==================================================
+
     with tab3:
-        # TODO: Person C — build a DataFrame with per-window data for both
-        #       systems and display with st.dataframe()
-        st.info("Raw data table will appear here after implementation.")
+
+        windows = list(range(num_windows))
+
+        df = pd.DataFrame({
+            "Window": windows,
+
+            "Joint Wait":
+                results["joint_opt"]["wait_times"],
+
+            "Baseline Wait":
+                results["seq_baseline"]["wait_times"],
+
+            "Joint Earnings Variance":
+                results["joint_opt"]["earnings_variances"],
+
+            "Baseline Earnings Variance":
+                results["seq_baseline"]["earnings_variances"],
+
+            "Joint Price Deviation":
+                results["joint_opt"]["price_deviations"],
+
+            "Baseline Price Deviation":
+                results["seq_baseline"]["price_deviations"],
+
+            "Joint Matching Rate":
+                results["joint_opt"]["matching_rates"],
+
+            "Baseline Matching Rate":
+                results["seq_baseline"]["matching_rates"]
+        })
+
+        st.dataframe(
+            df,
+            use_container_width=True
+        )
+
+        csv = df.to_csv(index=False)
+
+        st.download_button(
+            label="Download Results as CSV",
+            data=csv,
+            file_name="jointopt_results.csv",
+            mime="text/csv"
+        )
 
 else:
-    st.info("👈 Configure parameters and click **Run Simulation** to start.")
+    st.info(
+        "Configure parameters in the sidebar and "
+        "click 'Run Simulation' to begin."
+    )

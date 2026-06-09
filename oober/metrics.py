@@ -1,83 +1,66 @@
-"""
-Evaluation Metrics (Person C)
+import numpy as np
 
-Pure calculation functions. Takes raw assignment output and computes the four
-evaluation metrics. No side effects, easy to unit test.
-"""
+def compute_wait_time(assignments, feasibility_graph):
+    total_wait = 0.0
+
+    for rider_id, driver_id, _ in assignments:
+        total_wait += feasibility_graph[
+            ('rider', rider_id)
+        ][
+            ('driver', driver_id)
+        ]['travel_cost']
+
+    return total_wait
 
 import numpy as np
-import networkx as nx
 
+def compute_earnings_variance(assignments):
+    earnings = {}
 
-def compute_wait_time(
-    assignments: list[tuple],
-    feasibility_graph: nx.Graph
-) -> float:
-    """
-    Sum of travel_cost values for all matched (r, d) pairs.
+    for _, driver_id, price in assignments:
+        earnings[driver_id] = earnings.get(driver_id, 0) + price
 
-    Args:
-        assignments: List of (rider_id, driver_id, price) tuples.
-        feasibility_graph: Bipartite nx.Graph with 'travel_cost' edge attribute.
+    if not earnings:
+        return 0.0
 
-    Returns:
-        Total wait cost as a float.
-    """
-    raise NotImplementedError("TODO: Person C — implement wait time metric")
-
-
-def compute_earnings_variance(
-    assignments: list[tuple],
-    drivers: list[dict]
-) -> float:
-    """
-    For each driver in assignments, compute their total earnings (sum of prices).
-    Return variance of per-driver earnings list.
-    Drivers with no assignment contribute 0 earnings.
-
-    Args:
-        assignments: List of (rider_id, driver_id, price) tuples.
-        drivers: List of driver dictionaries to include unmatched drivers.
-
-    Returns:
-        Variance of per-driver earnings as a float.
-    """
-    raise NotImplementedError("TODO: Person C — implement earnings variance metric")
-
+    return float(np.var(list(earnings.values())))
 
 def compute_price_deviation(
-    assignments: list[tuple],
-    price_memory: dict,
-    riders: list[dict],
-    delta: float
-) -> float:
-    """
-    For each assignment (r, d, price), look up corridor = (rider.origin, rider.dest).
-    If corridor exists in price_memory:
-      Check if |price - prev_price| > delta * prev_price
-    Return fraction of assignments that violate the delta threshold.
+    assignments,
+    price_memory,
+    riders,
+    delta
+):
+    rider_lookup = {
+        rider['id']: rider
+        for rider in riders
+    }
 
-    Args:
-        assignments: List of (rider_id, driver_id, price) tuples.
-        price_memory: Dict mapping (origin_zone, dest_zone) to previous price.
-        riders: List of rider dicts with keys {id, origin_zone, dest_zone, wtp}.
-        delta: Price stability threshold (fraction of previous price).
+    violations = 0
+    checked = 0
 
-    Returns:
-        Fraction of assignments violating the delta threshold (0.0 to 1.0).
-    """
-    raise NotImplementedError("TODO: Person C — implement price deviation metric")
+    for rider_id, _, price in assignments:
+        rider = rider_lookup[rider_id]
 
+        corridor = (
+            rider['origin_zone'],
+            rider['dest_zone']
+        )
 
-def compute_matching_rate(assignments: list[tuple], total_riders: int) -> float:
-    """
-    Return len(assignments) / total_riders.
+        if corridor not in price_memory:
+            continue
 
-    Args:
-        assignments: List of (rider_id, driver_id, price) tuples.
-        total_riders: Total number of riders in the time window.
+        prev_price = price_memory[corridor]
 
-    Returns:
-        Matching rate as a float (0.0 to 1.0).
-    """
-    raise NotImplementedError("TODO: Person C — implement matching rate metric")
+        checked += 1
+
+        if abs(price - prev_price) > delta * prev_price:
+            violations += 1
+
+    return violations / checked if checked else 0.0
+
+def compute_matching_rate(assignments, total_riders):
+    if total_riders == 0:
+        return 0.0
+
+    return len(assignments) / total_riders
