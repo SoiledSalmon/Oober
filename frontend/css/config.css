@@ -1,0 +1,329 @@
+/* ============================================================
+   Oober — Config View Styles
+   ============================================================ */
+
+/* --- Config View Container --- */
+#config-view {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: var(--space-xl);
+  z-index: 1;
+}
+
+/* --- Parallax Background Target --- */
+#config-bg-gradient {
+  position: fixed;
+  inset: -50px;
+  background:
+    radial-gradient(ellipse 600px 400px at 30% 40%, rgba(59, 130, 246, 0.06) 0%, transparent 70%),
+    radial-gradient(ellipse 500px 350px at 70% 60%, rgba(16, 185, 129, 0.04) 0%, transparent 70%);
+  transition: transform 0.3s var(--ease-standard);
+  pointer-events: none;
+  z-index: 0;
+}
+
+
+/* --- Config Card --- */
+.config-card {
+  position: relative;
+  width: 100%;
+  max-width: 520px;
+  padding: var(--space-2xl) var(--space-xl);
+  z-index: 2;
+}
+
+.config-card .logo-section {
+  text-align: center;
+  margin-bottom: var(--space-xl);
+}
+
+.config-card .logo-section h1 {
+  font-size: 2.25rem;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  margin-bottom: var(--space-xs);
+}
+
+.config-card .logo-section h1 .accent {
+  color: var(--accent-blue);
+}
+
+.config-card .logo-section .subtitle {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+}
+
+
+/* --- Form Fields --- */
+.config-fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+  margin-bottom: var(--space-xl);
+}
+
+.field-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.field-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.field-label .field-value {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  color: var(--accent-blue);
+  min-width: 40px;
+  text-align: right;
+}
+
+
+/* --- Range Slider --- */
+.range-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(
+    to right,
+    var(--accent-blue) 0%,
+    var(--accent-blue) var(--fill-percent, 50%),
+    rgba(148, 163, 184, 0.12) var(--fill-percent, 50%),
+    rgba(148, 163, 184, 0.12) 100%
+  );
+  outline: none;
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-standard);
+}
+
+.range-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent-blue);
+  border: 2px solid var(--bg-primary);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+  cursor: pointer;
+  transition: box-shadow var(--duration-fast) var(--ease-standard),
+              transform var(--duration-fast) var(--ease-standard);
+}
+
+.range-slider::-webkit-slider-thumb:hover {
+  box-shadow: 0 0 0 6px rgba(59, 130, 246, 0.2);
+  transform: scale(1.1);
+}
+
+.range-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent-blue);
+  border: 2px solid var(--bg-primary);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+  cursor: pointer;
+}
+
+.range-slider::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(148, 163, 184, 0.12);
+}
+
+
+/* --- Number Input --- */
+.number-input {
+  width: 100%;
+  padding: 10px 14px;
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  outline: none;
+  transition: border-color var(--duration-fast) var(--ease-standard),
+              box-shadow var(--duration-fast) var(--ease-standard);
+}
+
+.number-input:focus {
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.number-input::placeholder {
+  color: var(--text-muted);
+}
+
+/* Remove number spinner */
+.number-input::-webkit-outer-spin-button,
+.number-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.number-input[type=number] {
+  -moz-appearance: textfield;
+}
+
+
+/* --- Run Button --- */
+.run-button {
+  position: relative;
+  width: 100%;
+  padding: 14px 24px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, var(--accent-blue) 0%, var(--accent-blue-dim) 100%);
+  color: white;
+  font-family: var(--font-heading);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  overflow: hidden;
+  transition: box-shadow var(--duration-normal) var(--ease-standard),
+              transform var(--duration-fast) var(--ease-standard);
+  will-change: transform;
+}
+
+.run-button::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg,
+    rgba(255, 255, 255, 0.15) 0%,
+    transparent 50%
+  );
+  opacity: 0;
+  transition: opacity var(--duration-normal) var(--ease-standard);
+}
+
+.run-button:hover {
+  box-shadow: 0 0 32px rgba(59, 130, 246, 0.35), 0 8px 24px rgba(59, 130, 246, 0.2);
+}
+
+.run-button:hover::before {
+  opacity: 1;
+}
+
+.run-button:active {
+  transform: scale(0.98);
+}
+
+.run-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.run-button .btn-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  position: relative;
+  z-index: 1;
+}
+
+.run-button .btn-icon {
+  font-size: 1.125rem;
+  transition: transform var(--duration-normal) var(--ease-standard);
+}
+
+.run-button:hover .btn-icon {
+  transform: translateX(2px);
+}
+
+
+/* --- Loading State --- */
+.run-button.loading .btn-text {
+  opacity: 0;
+}
+
+.run-button.loading .btn-spinner {
+  display: block;
+}
+
+.btn-spinner {
+  display: none;
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 22px;
+  height: 22px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* --- Progress Bar Inside Button --- */
+.run-button .progress-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  transition: width 0.3s var(--ease-standard);
+  width: 0;
+}
+
+
+/* --- Info Section --- */
+.config-info {
+  margin-top: var(--space-lg);
+  padding-top: var(--space-lg);
+  border-top: 1px solid var(--border-glass);
+  text-align: center;
+}
+
+.config-info .project-name {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: var(--space-xs);
+}
+
+.config-info .team-credit {
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+  opacity: 0.7;
+  line-height: 1.6;
+}
+
+/* --- Error State --- */
+.config-error {
+  padding: var(--space-md);
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: var(--radius-sm);
+  color: var(--accent-coral);
+  font-size: 0.8125rem;
+  margin-bottom: var(--space-md);
+  display: none;
+}
+
+.config-error.visible {
+  display: block;
+  animation: slideDown var(--duration-normal) var(--ease-out-expo);
+}

@@ -1,6 +1,7 @@
 pulp
 networkx
 numpy
-pandas
-streamlit
-plotly
+fastapi
+uvicorn[standard]
+pydantic
+httpx

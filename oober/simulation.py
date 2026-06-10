@@ -322,13 +322,13 @@ def run_simulation(
         "seq_baseline_avg_wait": sb_avg_wait,
         "wait_time_improvement_pct": _safe_improvement_pct(sb_avg_wait, jo_avg_wait),
         # Earnings variance (lower is better)
-        "joint_opt_avg_earnings_var": jo_avg_ev,
-        "seq_baseline_avg_earnings_var": sb_avg_ev,
-        "earnings_var_improvement_pct": _safe_improvement_pct(sb_avg_ev, jo_avg_ev),
+        "joint_opt_avg_earnings_variance": jo_avg_ev,
+        "seq_baseline_avg_earnings_variance": sb_avg_ev,
+        "earnings_variance_improvement_pct": _safe_improvement_pct(sb_avg_ev, jo_avg_ev),
         # Price deviation (lower is better)
-        "joint_opt_avg_price_dev": jo_avg_pd,
-        "seq_baseline_avg_price_dev": sb_avg_pd,
-        "price_dev_improvement_pct": _safe_improvement_pct(sb_avg_pd, jo_avg_pd),
+        "joint_opt_avg_price_deviation": jo_avg_pd,
+        "seq_baseline_avg_price_deviation": sb_avg_pd,
+        "price_deviation_improvement_pct": _safe_improvement_pct(sb_avg_pd, jo_avg_pd),
         # Matching rate (higher is better)
         "joint_opt_avg_matching_rate": jo_avg_mr,
         "seq_baseline_avg_matching_rate": sb_avg_mr,
@@ -344,6 +344,223 @@ def run_simulation(
         "joint_opt": jo_metrics,
         "seq_baseline": sb_metrics,
         "summary": summary,
+    }
+
+
+def run_simulation_with_trace(
+    num_windows: int = 10,
+    riders_per_window: tuple = (15, 30),
+    drivers_per_window: tuple = (20, 35),
+    delta: float = 0.10,
+    fairness_tolerance: float = 0.30,
+    num_zones: int = 10,
+    seed: int = 42,
+) -> dict:
+    """
+    Extended simulation that returns the same results as ``run_simulation()``
+    **plus** full per-window trace data for the frontend dashboard.
+
+    Additional keys in the returned dict
+    -------------------------------------
+    ``graph``
+        City-graph topology:
+        ``{"nodes": [0,1,...], "edges": [{"source": s, "target": t, "cost": c}, ...]}``
+
+    ``windows``
+        List of per-window dicts, each containing:
+        - ``riders``: list of rider dicts
+        - ``drivers``: list of driver dicts
+        - ``joint_opt_assignments``: ``[[rider_id, driver_id, price], ...]``
+        - ``seq_baseline_assignments``: same format
+        - all existing per-window metrics (wait_time, earnings_variance, …)
+    """
+    master_rng = np.random.default_rng(seed)
+
+    # Build city graph once
+    city_graph = build_city_graph(num_zones=num_zones, seed=seed)
+
+    # ── Serialize graph topology ──────────────────────────────────────────
+    graph_data = {
+        "nodes": list(city_graph.nodes()),
+        "edges": [
+            {"source": int(u), "target": int(v), "cost": float(d["cost"])}
+            for u, v, d in city_graph.edges(data=True)
+        ],
+    }
+
+    # Independent state for each system
+    jo_price_memory: dict = {}
+    jo_earnings_history: dict = {}
+    sb_price_memory: dict = {}
+    sb_earnings_history: dict = {}
+
+    # Per-window metric storage (same as run_simulation)
+    jo_metrics: dict[str, list] = {
+        "wait_times": [],
+        "earnings_variances": [],
+        "price_deviations": [],
+        "matching_rates": [],
+        "solve_times": [],
+    }
+    sb_metrics: dict[str, list] = {
+        "wait_times": [],
+        "earnings_variances": [],
+        "price_deviations": [],
+        "matching_rates": [],
+        "solve_times": [],
+    }
+
+    window_traces: list[dict] = []
+
+    for window_id in range(num_windows):
+        window_seed = int(master_rng.integers(0, 2**31))
+
+        win_rng = np.random.default_rng(window_seed)
+        num_riders = int(win_rng.integers(riders_per_window[0], riders_per_window[1] + 1))
+        num_drivers = int(win_rng.integers(drivers_per_window[0], drivers_per_window[1] + 1))
+
+        riders, drivers = generate_time_window_data(
+            num_riders=num_riders,
+            num_drivers=num_drivers,
+            num_zones=num_zones,
+            seed=window_seed + 1,
+        )
+
+        feas_graph = build_feasibility_graph(riders, drivers, city_graph)
+
+        # ── JointOpt ─────────────────────────────────────────────────────
+        try:
+            jo_result = solve_joint_opt(
+                feasibility_graph=feas_graph,
+                price_memory=jo_price_memory,
+                earnings_history=jo_earnings_history,
+                delta=delta,
+                fairness_tolerance=fairness_tolerance,
+                window_id=window_id,
+            )
+        except Exception as exc:
+            print(f"[WARN] JointOpt failed on window {window_id}: {exc}")
+            jo_result = {
+                "assignments": [],
+                "total_wait_cost": 0.0,
+                "matched_count": 0,
+                "solver_status": "Error",
+                "solve_time_sec": 0.0,
+            }
+
+        if jo_result["solver_status"] not in ("Optimal", "Feasible", "Greedy", "Error"):
+            print(f"[WARN] JointOpt non-optimal on window {window_id}: "
+                  f"{jo_result['solver_status']}")
+            jo_result["assignments"] = []
+            jo_result["total_wait_cost"] = 0.0
+            jo_result["matched_count"] = 0
+
+        # ── SeqBaseline ──────────────────────────────────────────────────
+        sb_result = solve_sequential_baseline(
+            riders=riders,
+            drivers=drivers,
+            city_graph=city_graph,
+            price_memory=sb_price_memory,
+        )
+
+        # ── Metrics ──────────────────────────────────────────────────────
+        jo_wait = compute_wait_time(jo_result["assignments"], feas_graph)
+        jo_ev = compute_earnings_variance(jo_result["assignments"], drivers)
+        jo_pd = compute_price_deviation(
+            jo_result["assignments"], jo_price_memory, riders, delta
+        )
+        jo_mr = compute_matching_rate(jo_result["assignments"], num_riders)
+
+        sb_wait = compute_wait_time(sb_result["assignments"], feas_graph)
+        sb_ev = compute_earnings_variance(sb_result["assignments"], drivers)
+        sb_pd = compute_price_deviation(
+            sb_result["assignments"], sb_price_memory, riders, delta
+        )
+        sb_mr = compute_matching_rate(sb_result["assignments"], num_riders)
+
+        jo_metrics["wait_times"].append(jo_wait)
+        jo_metrics["earnings_variances"].append(jo_ev)
+        jo_metrics["price_deviations"].append(jo_pd)
+        jo_metrics["matching_rates"].append(jo_mr)
+        jo_metrics["solve_times"].append(jo_result["solve_time_sec"])
+
+        sb_metrics["wait_times"].append(sb_wait)
+        sb_metrics["earnings_variances"].append(sb_ev)
+        sb_metrics["price_deviations"].append(sb_pd)
+        sb_metrics["matching_rates"].append(sb_mr)
+        sb_metrics["solve_times"].append(sb_result["solve_time_sec"])
+
+        # ── Per-window trace ─────────────────────────────────────────────
+        window_traces.append({
+            "window_id": window_id,
+            "riders": riders,
+            "drivers": drivers,
+            "joint_opt_assignments": [
+                [rid, did, price] for rid, did, price in jo_result["assignments"]
+            ],
+            "seq_baseline_assignments": [
+                [rid, did, price] for rid, did, price in sb_result["assignments"]
+            ],
+            "joint_opt_wait_time": jo_wait,
+            "joint_opt_earnings_variance": jo_ev,
+            "joint_opt_price_deviation": jo_pd,
+            "joint_opt_matching_rate": jo_mr,
+            "joint_opt_solve_time": jo_result["solve_time_sec"],
+            "seq_baseline_wait_time": sb_wait,
+            "seq_baseline_earnings_variance": sb_ev,
+            "seq_baseline_price_deviation": sb_pd,
+            "seq_baseline_matching_rate": sb_mr,
+            "seq_baseline_solve_time": sb_result["solve_time_sec"],
+        })
+
+        # ── Update state ─────────────────────────────────────────────────
+        _update_price_memory(jo_price_memory, jo_result["assignments"], riders)
+        _update_earnings_history(jo_earnings_history, jo_result["assignments"])
+
+        _update_price_memory(sb_price_memory, sb_result["assignments"], riders)
+        _update_earnings_history(sb_earnings_history, sb_result["assignments"])
+
+    # ── Summary (identical logic to run_simulation) ───────────────────────
+
+    def _avg(values: list[float]) -> float:
+        return sum(values) / max(len(values), 1)
+
+    jo_avg_wait = _avg(jo_metrics["wait_times"])
+    sb_avg_wait = _avg(sb_metrics["wait_times"])
+    jo_avg_ev = _avg(jo_metrics["earnings_variances"])
+    sb_avg_ev = _avg(sb_metrics["earnings_variances"])
+    jo_avg_pd = _avg(jo_metrics["price_deviations"])
+    sb_avg_pd = _avg(sb_metrics["price_deviations"])
+    jo_avg_mr = _avg(jo_metrics["matching_rates"])
+    sb_avg_mr = _avg(sb_metrics["matching_rates"])
+    jo_avg_st = _avg(jo_metrics["solve_times"])
+    sb_avg_st = _avg(sb_metrics["solve_times"])
+
+    summary = {
+        "joint_opt_avg_wait": jo_avg_wait,
+        "seq_baseline_avg_wait": sb_avg_wait,
+        "wait_time_improvement_pct": _safe_improvement_pct(sb_avg_wait, jo_avg_wait),
+        "joint_opt_avg_earnings_variance": jo_avg_ev,
+        "seq_baseline_avg_earnings_variance": sb_avg_ev,
+        "earnings_variance_improvement_pct": _safe_improvement_pct(sb_avg_ev, jo_avg_ev),
+        "joint_opt_avg_price_deviation": jo_avg_pd,
+        "seq_baseline_avg_price_deviation": sb_avg_pd,
+        "price_deviation_improvement_pct": _safe_improvement_pct(sb_avg_pd, jo_avg_pd),
+        "joint_opt_avg_matching_rate": jo_avg_mr,
+        "seq_baseline_avg_matching_rate": sb_avg_mr,
+        "matching_rate_improvement_pct": _safe_improvement_pct(
+            sb_avg_mr, jo_avg_mr, higher_is_better=True
+        ),
+        "joint_opt_avg_solve_time": jo_avg_st,
+        "seq_baseline_avg_solve_time": sb_avg_st,
+    }
+
+    return {
+        "joint_opt": jo_metrics,
+        "seq_baseline": sb_metrics,
+        "summary": summary,
+        "graph": graph_data,
+        "windows": window_traces,
     }
 
 
@@ -376,8 +593,8 @@ if __name__ == "__main__":
         results = run_simulation(num_windows=3, num_zones=8, seed=42)
         summary = results["summary"]
         print(f"Wait time improvement: {summary['wait_time_improvement_pct']:.1f}%")
-        print(f"Earnings var improvement: {summary['earnings_var_improvement_pct']:.1f}%")
-        print(f"Price dev improvement: {summary['price_dev_improvement_pct']:.1f}%")
+        print(f"Earnings var improvement: {summary['earnings_variance_improvement_pct']:.1f}%")
+        print(f"Price dev improvement: {summary['price_deviation_improvement_pct']:.1f}%")
         print(f"Matching rate improvement: {summary['matching_rate_improvement_pct']:.1f}%")
         print("\n[OK] simulation.py tests complete.")
     except NotImplementedError as exc:

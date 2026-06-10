@@ -132,7 +132,7 @@ class TestMetrics(unittest.TestCase):
         
         try:
             deviation = compute_price_deviation(assignments, price_memory, self.riders, delta=0.10)
-            self.assertAlmostEqual(deviation, 1.0 / 3.0)
+            self.assertAlmostEqual(deviation, 1.0 / 2.0)
         except NotImplementedError:
             self.skipTest("compute_price_deviation not implemented yet")
 

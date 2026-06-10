@@ -1,5 +1,6 @@
 import numpy as np
 
+
 def compute_wait_time(assignments, feasibility_graph):
     total_wait = 0.0
 
@@ -12,18 +13,23 @@ def compute_wait_time(assignments, feasibility_graph):
 
     return total_wait
 
-import numpy as np
 
-def compute_earnings_variance(assignments):
+def compute_earnings_variance(assignments, drivers):
+    """Variance of per-driver earnings including unmatched drivers (0 earnings)."""
     earnings = {}
 
     for _, driver_id, price in assignments:
         earnings[driver_id] = earnings.get(driver_id, 0) + price
 
-    if not earnings:
+    if not drivers:
         return 0.0
 
-    return float(np.var(list(earnings.values())))
+    # Build earnings list for ALL drivers, unmatched get 0.0
+    all_earnings = [
+        earnings.get(d['id'], 0.0) for d in drivers
+    ]
+
+    return float(np.var(all_earnings))
 
 def compute_price_deviation(
     assignments,

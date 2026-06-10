@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Oober — Joint Price-and-Match Optimization Dashboard for Ride-Hailing">
+  <meta name="theme-color" content="#06080f">
+  <title>Oober — Joint Price-and-Match Optimization</title>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Libraries -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.2/anime.min.js"></script>
+
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/config.css">
+  <link rel="stylesheet" href="css/simulation.css">
+  <link rel="stylesheet" href="css/results.css">
+</head>
+<body>
+
+  <!-- ============================================================
+       CONFIG VIEW
+       ============================================================ -->
+  <div id="config-view" role="main" aria-label="Simulation Configuration">
+    <div id="config-bg-gradient" aria-hidden="true"></div>
+
+    <div class="config-card glass-panel animate-scaleIn">
+      <!-- Logo -->
+      <div class="logo-section">
+        <h1><span class="accent">Oo</span>ber</h1>
+        <p class="subtitle">Joint Price-and-Match Optimization</p>
+      </div>
+
+      <!-- Error Display -->
+      <div id="config-error" class="config-error" role="alert" aria-live="polite"></div>
+
+      <!-- Parameters -->
+      <div class="config-fields">
+        <!-- Time Windows -->
+        <div class="field-group">
+          <label class="field-label" for="param-windows">
+            <span>Time Windows</span>
+            <span class="field-value font-mono" id="val-windows">10</span>
+          </label>
+          <input
+            type="range"
+            id="param-windows"
+            class="range-slider"
+            min="5" max="20" value="10" step="1"
+            aria-label="Number of time windows"
+          >
+        </div>
+
+        <!-- Price Stability δ -->
+        <div class="field-group">
+          <label class="field-label" for="param-delta">
+            <span>Price Stability δ</span>
+            <span class="field-value font-mono" id="val-delta">0.10</span>
+          </label>
+          <input
+            type="range"
+            id="param-delta"
+            class="range-slider"
+            min="0.05" max="0.30" value="0.10" step="0.01"
+            aria-label="Price stability delta threshold"
+          >
+        </div>
+
+        <!-- Fairness Tolerance -->
+        <div class="field-group">
+          <label class="field-label" for="param-fairness">
+            <span>Fairness Tolerance</span>
+            <span class="field-value font-mono" id="val-fairness">0.30</span>
+          </label>
+          <input
+            type="range"
+            id="param-fairness"
+            class="range-slider"
+            min="0.10" max="0.50" value="0.30" step="0.01"
+            aria-label="Earnings fairness tolerance"
+          >
+        </div>
+
+        <!-- City Zones -->
+        <div class="field-group">
+          <label class="field-label" for="param-zones">
+            <span>City Zones</span>
+            <span class="field-value font-mono" id="val-zones">10</span>
+          </label>
+          <input
+            type="range"
+            id="param-zones"
+            class="range-slider"
+            min="5" max="15" value="10" step="1"
+            aria-label="Number of city zones"
+          >
+        </div>
+
+        <!-- Random Seed -->
+        <div class="field-group">
+          <label class="field-label" for="param-seed">
+            <span>Random Seed</span>
+          </label>
+          <input
+            type="number"
+            id="param-seed"
+            class="number-input"
+            value="42"
+            placeholder="42"
+            aria-label="Random seed value"
+          >
+        </div>
+      </div>
+
+      <!-- Run Button -->
+      <button id="run-btn" class="run-button" type="button" aria-label="Run simulation">
+        <span class="btn-content">
+          <span class="btn-icon">▶</span>
+          <span class="btn-text">Run Simulation</span>
+        </span>
+        <div class="btn-spinner" aria-hidden="true"></div>
+        <div class="progress-bar" aria-hidden="true"></div>
+      </button>
+
+      <!-- Project Info -->
+      <div class="config-info">
+        <p class="project-name">DAA PBL Project</p>
+        <p class="team-credit">RV College of Engineering, 2025–26</p>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ============================================================
+       SIMULATION VIEW
+       ============================================================ -->
+  <div id="simulation-view" role="main" aria-label="Simulation Results Viewer">
+
+    <!-- Header -->
+    <header class="sim-header">
+      <div class="header-left">
+        <button class="back-btn" id="back-btn" aria-label="Return to configuration">
+          <span>←</span>
+          <span>Config</span>
+        </button>
+        <span class="header-logo"><span class="accent">Oo</span>ber</span>
+      </div>
+
+      <div class="header-right">
+        <div class="window-counter">
+          Window <span class="current" id="window-current">0</span> / <span id="window-total">0</span>
+        </div>
+
+        <div class="speed-selector">
+          <span class="speed-label">Speed</span>
+          <div class="speed-buttons" role="group" aria-label="Playback speed">
+            <button class="speed-btn" data-speed="0.5">0.5×</button>
+            <button class="speed-btn active" data-speed="1">1×</button>
+            <button class="speed-btn" data-speed="2">2×</button>
+            <button class="speed-btn" data-speed="4">4×</button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Summary Banner (shown at end) -->
+    <div id="summary-banner" class="summary-banner glass-card" style="display:none;">
+      <div class="summary-headline">
+        <h2>Simulation Complete</h2>
+        <p class="summary-subtitle" id="summary-subtitle"></p>
+      </div>
+      <div class="summary-actions">
+        <button class="download-btn" id="download-csv-btn" aria-label="Download results as CSV">
+          <span class="btn-icon">↓</span>
+          <span>Download CSV</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Aggregate Metrics (shown at end) -->
+    <div id="aggregate-section" class="aggregate-metrics" style="display:none;">
+      <div class="aggregate-card glass-card">
+        <div class="agg-label">Wait Time Reduction</div>
+        <div class="agg-value positive" id="agg-wait">—</div>
+        <div class="agg-comparison">
+          <span class="joint-val" id="agg-wait-joint">—</span>
+          <span>vs</span>
+          <span class="baseline-val" id="agg-wait-base">—</span>
+        </div>
+      </div>
+      <div class="aggregate-card glass-card">
+        <div class="agg-label">Variance Reduction</div>
+        <div class="agg-value positive" id="agg-variance">—</div>
+        <div class="agg-comparison">
+          <span class="joint-val" id="agg-var-joint">—</span>
+          <span>vs</span>
+          <span class="baseline-val" id="agg-var-base">—</span>
+        </div>
+      </div>
+      <div class="aggregate-card glass-card">
+        <div class="agg-label">Price Stability Gain</div>
+        <div class="agg-value positive" id="agg-price">—</div>
+        <div class="agg-comparison">
+          <span class="joint-val" id="agg-price-joint">—</span>
+          <span>vs</span>
+          <span class="baseline-val" id="agg-price-base">—</span>
+        </div>
+      </div>
+      <div class="aggregate-card glass-card">
+        <div class="agg-label">Matching Rate Gain</div>
+        <div class="agg-value positive" id="agg-match">—</div>
+        <div class="agg-comparison">
+          <span class="joint-val" id="agg-match-joint">—</span>
+          <span>vs</span>
+          <span class="baseline-val" id="agg-match-base">—</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- City Graphs -->
+    <div class="graph-container">
+      <div class="graph-panel glass-card">
+        <div class="graph-title">
+          <h3>JointOpt</h3>
+          <span class="badge badge-blue">ILP</span>
+        </div>
+        <div class="graph-svg-wrap" id="graph-joint">
+          <svg id="svg-joint" aria-label="JointOpt city graph visualization"></svg>
+        </div>
+      </div>
+
+      <div class="graph-panel glass-card">
+        <div class="graph-title">
+          <h3>SeqBaseline</h3>
+          <span class="badge badge-coral">Greedy</span>
+        </div>
+        <div class="graph-svg-wrap" id="graph-baseline">
+          <svg id="svg-baseline" aria-label="SeqBaseline city graph visualization"></svg>
+        </div>
+      </div>
+    </div>
+
+    <!-- Timeline -->
+    <div class="timeline-container">
+      <div class="timeline-bar" id="timeline-bar" role="slider" aria-label="Simulation timeline" tabindex="0">
+        <div class="timeline-track">
+          <div class="timeline-fill" id="timeline-fill"></div>
+        </div>
+        <div class="timeline-markers" id="timeline-markers"></div>
+      </div>
+    </div>
+
+    <!-- Playback Controls -->
+    <div class="playback-controls">
+      <button class="playback-btn" id="btn-step-back" aria-label="Previous window" title="Previous">⏮</button>
+      <button class="playback-btn play-btn" id="btn-play" aria-label="Play or pause" title="Play/Pause">▶</button>
+      <button class="playback-btn" id="btn-step-fwd" aria-label="Next window" title="Next">⏭</button>
+    </div>
+
+    <!-- Metrics -->
+    <div class="metrics-row" id="metrics-row">
+      <div class="metric-card glass-card" data-accent="blue" data-metric="wait_time">
+        <div class="metric-header">
+          <span class="metric-name">Wait Time</span>
+          <span class="metric-info tooltip-trigger" data-tooltip="Total travel cost for matched pairs (lower is better)">ⓘ</span>
+        </div>
+        <div class="metric-values">
+          <div class="metric-col">
+            <span class="metric-label">JointOpt</span>
+            <span class="metric-value font-mono" id="m-wait-joint">—</span>
+          </div>
+          <div class="metric-col">
+            <span class="metric-label">Baseline</span>
+            <span class="metric-value font-mono" id="m-wait-base">—</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="metric-card glass-card" data-accent="emerald" data-metric="earnings_variance">
+        <div class="metric-header">
+          <span class="metric-name">Earnings Var.</span>
+          <span class="metric-info tooltip-trigger" data-tooltip="Variance in driver earnings — fairness indicator (lower is better)">ⓘ</span>
+        </div>
+        <div class="metric-values">
+          <div class="metric-col">
+            <span class="metric-label">JointOpt</span>
+            <span class="metric-value font-mono" id="m-var-joint">—</span>
+          </div>
+          <div class="metric-col">
+            <span class="metric-label">Baseline</span>
+            <span class="metric-value font-mono" id="m-var-base">—</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="metric-card glass-card" data-accent="amber" data-metric="price_deviation">
+        <div class="metric-header">
+          <span class="metric-name">Price Deviation</span>
+          <span class="metric-info tooltip-trigger" data-tooltip="Fraction of prices exceeding δ-stability bound (lower is better)">ⓘ</span>
+        </div>
+        <div class="metric-values">
+          <div class="metric-col">
+            <span class="metric-label">JointOpt</span>
+            <span class="metric-value font-mono" id="m-price-joint">—</span>
+          </div>
+          <div class="metric-col">
+            <span class="metric-label">Baseline</span>
+            <span class="metric-value font-mono" id="m-price-base">—</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="metric-card glass-card" data-accent="coral" data-metric="matching_rate">
+        <div class="metric-header">
+          <span class="metric-name">Matching Rate</span>
+          <span class="metric-info tooltip-trigger" data-tooltip="Fraction of riders successfully matched (higher is better)">ⓘ</span>
+        </div>
+        <div class="metric-values">
+          <div class="metric-col">
+            <span class="metric-label">JointOpt</span>
+            <span class="metric-value font-mono" id="m-match-joint">—</span>
+          </div>
+          <div class="metric-col">
+            <span class="metric-label">Baseline</span>
+            <span class="metric-value font-mono" id="m-match-base">—</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Charts -->
+    <div class="charts-grid" id="charts-grid">
+      <div class="chart-panel glass-card" data-chart="wait_time">
+        <div class="chart-title">Wait Time per Window</div>
+        <div class="chart-legend">
+          <span class="legend-item"><span class="legend-line joint"></span> JointOpt</span>
+          <span class="legend-item"><span class="legend-line baseline"></span> Baseline</span>
+        </div>
+        <div class="chart-canvas-wrap">
+          <canvas id="chart-wait" aria-label="Wait time comparison chart"></canvas>
+        </div>
+      </div>
+
+      <div class="chart-panel glass-card" data-chart="earnings_variance">
+        <div class="chart-title">Earnings Variance per Window</div>
+        <div class="chart-legend">
+          <span class="legend-item"><span class="legend-line joint"></span> JointOpt</span>
+          <span class="legend-item"><span class="legend-line baseline"></span> Baseline</span>
+        </div>
+        <div class="chart-canvas-wrap">
+          <canvas id="chart-variance" aria-label="Earnings variance comparison chart"></canvas>
+        </div>
+      </div>
+
+      <div class="chart-panel glass-card" data-chart="price_deviation">
+        <div class="chart-title">Price Deviation per Window</div>
+        <div class="chart-legend">
+          <span class="legend-item"><span class="legend-line joint"></span> JointOpt</span>
+          <span class="legend-item"><span class="legend-line baseline"></span> Baseline</span>
+        </div>
+        <div class="chart-canvas-wrap">
+          <canvas id="chart-price" aria-label="Price deviation comparison chart"></canvas>
+        </div>
+      </div>
+
+      <div class="chart-panel glass-card" data-chart="matching_rate">
+        <div class="chart-title">Matching Rate per Window</div>
+        <div class="chart-legend">
+          <span class="legend-item"><span class="legend-line joint"></span> JointOpt</span>
+          <span class="legend-item"><span class="legend-line baseline"></span> Baseline</span>
+        </div>
+        <div class="chart-canvas-wrap">
+          <canvas id="chart-match" aria-label="Matching rate comparison chart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Log Panel -->
+    <div class="log-panel">
+      <button class="log-toggle" id="log-toggle" aria-expanded="false" aria-controls="log-content">
+        <span>Assignment Details</span>
+        <span class="toggle-icon">▼</span>
+      </button>
+      <div class="log-content" id="log-content" role="region" aria-label="Assignment details log">
+        <!-- Populated by log.js -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts (order matters — dependencies first) -->
+  <script src="js/api.js"></script>
+  <script src="js/city-graph.js"></script>
+  <script src="js/playback.js"></script>
+  <script src="js/charts.js"></script>
+  <script src="js/metrics.js"></script>
+  <script src="js/log.js"></script>
+  <script src="js/simulation.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
