@@ -7,8 +7,7 @@ Serves the simulation API and static frontend files.
 import sys
 import os
 
-# Allow sibling-module imports (city_graph, ilp_engine, etc.) the same way
-# the old Streamlit app.py did.
+# Allow sibling-module imports (city_graph, ilp_engine, etc.) for FastAPI.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from fastapi import FastAPI

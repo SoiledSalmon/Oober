@@ -118,7 +118,7 @@ def solve_joint_opt(
 
     # Objective Function
     prob += pulp.lpSum(
-        feasibility_graph[r_node][d_node]["travel_cost"]
+        (feasibility_graph[r_node][d_node]["travel_cost"] - 10000.0)
         * x[(r_node[1], d_node[1])]
         for u, v in feasibility_graph.edges()
         for r_node, d_node in [((u, v) if u[0] == 'rider' else (v, u))]
@@ -174,95 +174,97 @@ def solve_joint_opt(
         )
 
     # Stability Constraints
-    for u, v in feasibility_graph.edges():
-        r_node, d_node = (u, v) if u[0] == 'rider' else (v, u)
+    if delta < 1.0:
+        for u, v in feasibility_graph.edges():
+            r_node, d_node = (u, v) if u[0] == 'rider' else (v, u)
 
-        rid = r_node[1]
-        did = d_node[1]
+            rid = r_node[1]
+            did = d_node[1]
 
-        edge = feasibility_graph[r_node][d_node]
+            edge = feasibility_graph[r_node][d_node]
 
-        corridor = (
-            edge["origin_zone"],
-            edge["dest_zone"]
-        )
-
-        if corridor in price_memory:
-
-            prev_price = price_memory[corridor]
-
-            lower = prev_price * (1 - delta)
-            upper = prev_price * (1 + delta)
-
-            prob += (
-                p[(rid, did)]
-                >= lower * x[(rid, did)]
+            corridor = (
+                edge["origin_zone"],
+                edge["dest_zone"]
             )
 
-            prob += (
-                p[(rid, did)]
-                <= upper * x[(rid, did)]
-            )
+            if corridor in price_memory:
+
+                prev_price = price_memory[corridor]
+
+                lower = prev_price * (1 - delta)
+                upper = prev_price * (1 + delta)
+
+                prob += (
+                    p[(rid, did)]
+                    >= lower * x[(rid, did)]
+                )
+
+                prob += (
+                    p[(rid, did)]
+                    <= upper * x[(rid, did)]
+                )
 
     # Fairness Constraints
+    if fairness_tolerance < 1.0:
 
-    midpoints = []
+        midpoints = []
 
-    for _, _, data in feasibility_graph.edges(data=True):
+        for _, _, data in feasibility_graph.edges(data=True):
 
-        midpoint = (
-            data["price_lb"] +
-            data["price_ub"]
-        ) / 2
+            midpoint = (
+                data["price_lb"] +
+                data["price_ub"]
+            ) / 2
 
-        midpoints.append(midpoint)
+            midpoints.append(midpoint)
 
-    target_earnings = (
-        np.mean(midpoints)
-        if midpoints
-        else 0
-    )
+        target_earnings = (
+            np.mean(midpoints)
+            if midpoints
+            else 0
+        )
 
-    for driver in driver_nodes:
+        for driver in driver_nodes:
 
-        did = driver[1]
+            did = driver[1]
 
-        earnings_terms = []
-        assignment_terms = []
+            earnings_terms = []
+            assignment_terms = []
 
-        for rider in feasibility_graph.neighbors(driver):
+            for rider in feasibility_graph.neighbors(driver):
 
-            rid = rider[1]
+                rid = rider[1]
 
-            earnings_terms.append(
-                p[(rid, did)]
+                earnings_terms.append(
+                    p[(rid, did)]
+                )
+
+                assignment_terms.append(
+                    x[(rid, did)]
+                )
+
+            earnings_d = pulp.lpSum(
+                earnings_terms
             )
 
-            assignment_terms.append(
-                x[(rid, did)]
+            assignments_d = pulp.lpSum(
+                assignment_terms
             )
 
-        earnings_d = pulp.lpSum(
-            earnings_terms
-        )
+            prob += (
+                earnings_d
+                <= target_earnings
+                * (1 + fairness_tolerance)
+                * assignments_d
+            )
 
-        assignments_d = pulp.lpSum(
-            assignment_terms
-        )
-
-        prob += (
-            earnings_d
-            <= target_earnings
-            * (1 + fairness_tolerance)
-            * assignments_d
-        )
-
-        prob += (
-            earnings_d
-            >= target_earnings
-            * (1 - fairness_tolerance)
-            * assignments_d
-        )
+            prob += (
+                earnings_d
+                >= target_earnings
+                * (1 - fairness_tolerance)
+                * assignments_d
+            )
 
     solver = pulp.PULP_CBC_CMD(
         msg=0,
@@ -274,6 +276,21 @@ def solve_joint_opt(
     status = pulp.LpStatus[
         prob.status
     ]
+
+    # Recursive relaxation if infeasible/undefined
+    if status not in ["Optimal", "Feasible"] and (delta < 1.0 or fairness_tolerance < 1.0):
+        print(f"[WARN] JointOpt solver status {status} on window {window_id}. Re-running with relaxed constraints (delta=1.0, fairness_tolerance=1.0)...")
+        relaxed_res = solve_joint_opt(
+            feasibility_graph=feasibility_graph,
+            price_memory=price_memory,
+            earnings_history=earnings_history,
+            delta=1.0,
+            fairness_tolerance=1.0,
+            window_id=window_id
+        )
+        if relaxed_res["solver_status"] in ["Optimal", "Feasible"]:
+            relaxed_res["solver_status"] = "Relaxed"
+        return relaxed_res
 
     assignments = []
     total_wait_cost = 0

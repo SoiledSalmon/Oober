@@ -1,6 +1,7 @@
 import unittest
 import sys
 import os
+from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 # Adjust path to import oober
@@ -109,6 +110,34 @@ class TestBackendAPI(unittest.TestCase):
         """Verify that seed must be >= 0, returning 422 JSON otherwise."""
         response = self.client.post("/api/simulate", json={"seed": -1})
         self.assertEqual(response.status_code, 422)
+
+    @patch("simulation.solve_joint_opt")
+    def test_simulate_fallback_to_greedy(self, mock_solve_joint_opt):
+        """Verify that if the ILP solver fails completely, it falls back to SeqBaseline."""
+        mock_solve_joint_opt.return_value = {
+            "assignments": [],
+            "total_wait_cost": 0.0,
+            "matched_count": 0,
+            "solver_status": "Infeasible",
+            "solve_time_sec": 0.01,
+        }
+        
+        payload = {
+            "num_windows": 3,
+            "delta": 0.10,
+            "fairness_tolerance": 0.30,
+            "num_zones": 5,
+            "seed": 42
+        }
+        response = self.client.post("/api/simulate", json=payload)
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        
+        # Check that the solver status returned is "Fallback" for all windows
+        for window in data["windows"]:
+            self.assertEqual(window["joint_opt_solver_status"], "Fallback")
+            # Should have baseline assignments copied to joint_opt
+            self.assertEqual(window["joint_opt_assignments"], window["seq_baseline_assignments"])
 
 
 if __name__ == "__main__":

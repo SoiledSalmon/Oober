@@ -122,8 +122,8 @@ class TestMetrics(unittest.TestCase):
         #    If delta=0.10, deviation 0.3333 > 0.10 (Violation!)
         # 3. Rider 2 -> Driver 2 at 75.0 (Corridor (2,5), no price memory)
         #    Ignored (No violation)
-        # Total assignments = 3. Violations = 1.
-        # Price deviation fraction = 1 / 3 = 0.3333...
+        # Total assignments with memory = 2. Violations = 1.
+        # Price deviation fraction = 1 / 2 = 0.5
         assignments = [
             (0, 0, 52.0),
             (1, 1, 40.0),

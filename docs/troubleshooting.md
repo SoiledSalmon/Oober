@@ -24,11 +24,13 @@ This guide covers common errors, environment setup issues, solver failures, and 
 
 ## 2. Optimization & Solver Failures
 
-### JointOpt Returns 0 Matches (Solver Status: Infeasible)
-- **Cause**: The constraints are too tight. If you set Price Stability ($\delta$) very low (e.g. $0.05$) and Fairness Tolerance low (e.g. $0.10$), and there is high supply-demand mismatch, the solver cannot find any set of assignment prices that satisfies all constraints simultaneously. When PuLP solver returns `"Infeasible"`, the simulator sets assignments to empty, resulting in zero matches.
+### JointOpt Falls Back to Baseline (Solver Status: Fallback / Relaxed)
+- **Cause**: The constraints are too tight. If you set Price Stability ($\delta$) very low and Fairness Tolerance low, and there is a high supply-demand mismatch, the solver cannot find any set of assignment prices that satisfies all constraints simultaneously. The system now handles this gracefully:
+  1. It first relaxes constraints internally (sets delta = 1.0, fairness_tolerance = 1.0) and re-solves (status: `"Relaxed"`).
+  2. If that still fails, it falls back to the sequential baseline (status: `"Fallback"`).
 - **Solution**:
-  - Relax parameters in the configuration panel (increase $\delta$ to $0.20+$ and Fairness to $0.30+$).
-  - Increase the number of City Zones or seed to generate a different distribution.
+  - To see fully constrained JointOpt behavior, relax your input parameters in the configuration panel (increase $\delta$ to $0.10+$ and Fairness to $0.30+$).
+  - Increase the number of City Zones or try a different seed.
 
 ### `pulp.apis.core.PulpSolverError: PuLP: cannot run default solver cbc`
 - **Cause**: PuLP could not locate the default Coin-OR CBC solver binary for your platform.

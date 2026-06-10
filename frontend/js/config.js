@@ -80,20 +80,20 @@
         var seed = seedVal === '' ? 42 : parseInt(seedVal, 10);
 
         // Validation
-        if (isNaN(num_windows) || num_windows < 5 || num_windows > 20) {
-          showError('Time Windows must be an integer between 5 and 20.');
+        if (isNaN(num_windows) || num_windows < 1 || num_windows > 50) {
+          showError('Time Windows must be an integer between 1 and 50.');
           return;
         }
-        if (isNaN(delta) || delta < 0.05 || delta > 0.30) {
-          showError('Price Stability δ must be a number between 0.05 and 0.30.');
+        if (isNaN(delta) || delta < 0.01 || delta > 1.00) {
+          showError('Price Stability δ must be a number between 0.01 and 1.00.');
           return;
         }
-        if (isNaN(fairness_tolerance) || fairness_tolerance < 0.10 || fairness_tolerance > 0.50) {
-          showError('Fairness Tolerance must be a number between 0.10 and 0.50.');
+        if (isNaN(fairness_tolerance) || fairness_tolerance < 0.01 || fairness_tolerance > 1.00) {
+          showError('Fairness Tolerance must be a number between 0.01 and 1.00.');
           return;
         }
-        if (isNaN(num_zones) || num_zones < 5 || num_zones > 15) {
-          showError('City Zones must be an integer between 5 and 15.');
+        if (isNaN(num_zones) || num_zones < 3 || num_zones > 30) {
+          showError('City Zones must be an integer between 3 and 30.');
           return;
         }
         if (isNaN(seed) || seed < 0) {
