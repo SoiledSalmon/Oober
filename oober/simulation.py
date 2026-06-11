@@ -38,49 +38,57 @@ __all__ = [
 ]
 
 
+try:
+    from .config import (
+        DEFAULT_DELTA,
+        DEFAULT_FAIRNESS_TOLERANCE,
+        DEFAULT_NUM_ZONES,
+        RIDER_WTP_MEAN,
+        RIDER_WTP_STD,
+        RIDER_WTP_MIN,
+        RIDER_WTP_MAX,
+        DRIVER_MAF_MEAN,
+        DRIVER_MAF_STD,
+        DRIVER_MAF_MIN,
+        DRIVER_MAF_MAX,
+    )
+except ImportError:
+    from config import (
+        DEFAULT_DELTA,
+        DEFAULT_FAIRNESS_TOLERANCE,
+        DEFAULT_NUM_ZONES,
+        RIDER_WTP_MEAN,
+        RIDER_WTP_STD,
+        RIDER_WTP_MIN,
+        RIDER_WTP_MAX,
+        DRIVER_MAF_MEAN,
+        DRIVER_MAF_STD,
+        DRIVER_MAF_MIN,
+        DRIVER_MAF_MAX,
+    )
+
+
 def generate_time_window_data(
     num_riders: int,
     num_drivers: int,
-    num_zones: int = 10,
-    seed: int | None = None
+    num_zones: int = DEFAULT_NUM_ZONES,
+    seed: int | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """
-    Generates synthetic riders and drivers for one time window.
-
-    Riders: each has {id, origin_zone, dest_zone, wtp}
-      - origin_zone, dest_zone: random integers in [0, num_zones)
-      - wtp: drawn from Normal(mean=50, std=15), clipped to [20, 100]
-
-    Drivers: each has {id, current_zone, maf}
-      - current_zone: random integer in [0, num_zones)
-      - maf: drawn from Normal(mean=30, std=8), clipped to [10, 60]
-
-    Note: calibrate so ~60-70% of (rider, driver) pairs are feasible
-    (i.e., wtp >= maf for most pairs). The Normal distributions above
-    achieve this since E[wtp]=50 > E[maf]=30.
-
-    Args:
-        num_riders: Number of riders to generate.
-        num_drivers: Number of drivers to generate.
-        num_zones: Number of city zones for zone assignment.
-        seed: Random seed for reproducibility (None for random).
-
-    Returns:
-        (riders_list, drivers_list) tuple.
-    """
+    """Generates synthetic riders and drivers for one time window."""
     rng = np.random.default_rng(seed)
 
-    # --- Generate riders ---
-    riders: list[dict] = []
-    wtp_values = np.clip(rng.normal(50, 15, size=num_riders), 20, 100)
-
+    # Generate riders
+    riders: list[dict[str, Any]] = []
+    wtp_values = np.clip(
+        rng.normal(RIDER_WTP_MEAN, RIDER_WTP_STD, size=num_riders),
+        RIDER_WTP_MIN,
+        RIDER_WTP_MAX,
+    )
     for i in range(num_riders):
         origin = int(rng.integers(0, num_zones))
         dest = int(rng.integers(0, num_zones))
-        # Avoid same-zone trips
         while dest == origin:
             dest = int(rng.integers(0, num_zones))
-
         riders.append({
             "id": i,
             "origin_zone": origin,
@@ -88,10 +96,13 @@ def generate_time_window_data(
             "wtp": round(float(wtp_values[i]), 2),
         })
 
-    # --- Generate drivers ---
-    drivers: list[dict] = []
-    maf_values = np.clip(rng.normal(30, 8, size=num_drivers), 10, 60)
-
+    # Generate drivers
+    drivers: list[dict[str, Any]] = []
+    maf_values = np.clip(
+        rng.normal(DRIVER_MAF_MEAN, DRIVER_MAF_STD, size=num_drivers),
+        DRIVER_MAF_MIN,
+        DRIVER_MAF_MAX,
+    )
     for i in range(num_drivers):
         drivers.append({
             "id": i,
@@ -129,40 +140,215 @@ def _safe_improvement_pct(
     jointopt_val: float,
     higher_is_better: bool = False,
 ) -> float:
-    """
-    Compute improvement percentage.
-
-    For metrics where *lower* is better (wait time, variance, deviation):
-        improvement = (baseline - jointopt) / baseline * 100
-
-    For metrics where *higher* is better (matching rate):
-        improvement = (jointopt - baseline) / baseline * 100
-    """
+    """Compute improvement percentage."""
     denom = max(abs(baseline_val), 1e-9)
     if higher_is_better:
         return (jointopt_val - baseline_val) / denom * 100
     return (baseline_val - jointopt_val) / denom * 100
 
 
+def _init_metrics_storage() -> dict[str, list[float]]:
+    """Initialize lists to store per-window metric evaluation values."""
+    return {
+        "wait_times": [],
+        "earnings_variances": [],
+        "price_deviations": [],
+        "matching_rates": [],
+        "solve_times": [],
+    }
+
+
+def _run_joint_opt_with_fallback(
+    feas_graph: nx.Graph,
+    price_memory: dict[tuple[int, int], float],
+    earnings_history: dict[int, float],
+    delta: float,
+    fairness_tolerance: float,
+    window_id: int,
+    riders: list[dict[str, Any]],
+    drivers: list[dict[str, Any]],
+    city_graph: nx.DiGraph,
+) -> dict[str, Any]:
+    """Run JointOpt solver, and fall back to SeqBaseline on solver errors or failures."""
+    try:
+        jo_result = solve_joint_opt(
+            feasibility_graph=feas_graph,
+            price_memory=price_memory,
+            earnings_history=earnings_history,
+            delta=delta,
+            fairness_tolerance=fairness_tolerance,
+            window_id=window_id,
+        )
+    except Exception as exc:
+        print(f"[WARN] JointOpt failed on window {window_id} with exception: {exc}")
+        jo_result = {
+            "assignments": [],
+            "total_wait_cost": 0.0,
+            "matched_count": 0,
+            "solver_status": "Error",
+            "solve_time_sec": 0.0,
+        }
+
+    if jo_result["solver_status"] not in ("Optimal", "Feasible", "Relaxed"):
+        print(f"[WARN] JointOpt status {jo_result['solver_status']} on window {window_id}. Falling back.")
+        fallback_res = solve_sequential_baseline(
+            riders=riders, drivers=drivers, city_graph=city_graph, price_memory=price_memory
+        )
+        return {
+            "assignments": fallback_res["assignments"],
+            "total_wait_cost": fallback_res["total_wait_cost"],
+            "matched_count": fallback_res["matched_count"],
+            "solver_status": "Fallback",
+            "solve_time_sec": fallback_res["solve_time_sec"],
+        }
+    return jo_result
+
+
+def _record_window_metrics(
+    result: dict[str, Any],
+    drivers: list[dict[str, Any]],
+    price_memory: dict[tuple[int, int], float],
+    riders: list[dict[str, Any]],
+    delta: float,
+    metrics: dict[str, list[float]],
+    feas_graph: nx.Graph,
+    num_riders: int,
+) -> tuple[float, float, float, float]:
+    """Compute metrics for a solver result and record them in the metrics dict."""
+    wait = compute_wait_time(result["assignments"], feas_graph)
+    ev = compute_earnings_variance(result["assignments"], drivers)
+    pd = compute_price_deviation(result["assignments"], price_memory, riders, delta)
+    mr = compute_matching_rate(result["assignments"], num_riders)
+
+    metrics["wait_times"].append(wait)
+    metrics["earnings_variances"].append(ev)
+    metrics["price_deviations"].append(pd)
+    metrics["matching_rates"].append(mr)
+    metrics["solve_times"].append(result["solve_time_sec"])
+
+    return wait, ev, pd, mr
+
+
+def _run_single_window_simulation(
+    window_seed: int,
+    window_id: int,
+    riders_per_window: tuple[int, int],
+    drivers_per_window: tuple[int, int],
+    num_zones: int,
+    city_graph: nx.DiGraph,
+    jo_price_memory: dict[tuple[int, int], float],
+    jo_earnings_history: dict[int, float],
+    sb_price_memory: dict[tuple[int, int], float],
+    sb_earnings_history: dict[int, float],
+    delta: float,
+    fairness_tolerance: float,
+    jo_metrics: dict[str, list[float]],
+    sb_metrics: dict[str, list[float]],
+    return_trace: bool,
+) -> dict[str, Any] | None:
+    """Run a single step of the multi-window simulation, updating metrics and state."""
+    win_rng = np.random.default_rng(window_seed)
+    num_riders = int(win_rng.integers(riders_per_window[0], riders_per_window[1] + 1))
+    num_drivers = int(win_rng.integers(drivers_per_window[0], drivers_per_window[1] + 1))
+
+    riders, drivers = generate_time_window_data(
+        num_riders=num_riders,
+        num_drivers=num_drivers,
+        num_zones=num_zones,
+        seed=window_seed + 1,
+    )
+    feas_graph = build_feasibility_graph(riders, drivers, city_graph)
+
+    jo_result = _run_joint_opt_with_fallback(
+        feas_graph, jo_price_memory, jo_earnings_history, delta,
+        fairness_tolerance, window_id, riders, drivers, city_graph
+    )
+    sb_result = solve_sequential_baseline(
+        riders=riders, drivers=drivers, city_graph=city_graph, price_memory=sb_price_memory
+    )
+
+    jo_w, jo_ev, jo_pd, jo_mr = _record_window_metrics(
+        jo_result, drivers, jo_price_memory, riders, delta, jo_metrics, feas_graph, num_riders
+    )
+    sb_w, sb_ev, sb_pd, sb_mr = _record_window_metrics(
+        sb_result, drivers, sb_price_memory, riders, delta, sb_metrics, feas_graph, num_riders
+    )
+
+    _update_price_memory(jo_price_memory, jo_result["assignments"], riders)
+    _update_earnings_history(jo_earnings_history, jo_result["assignments"])
+    _update_price_memory(sb_price_memory, sb_result["assignments"], riders)
+    _update_earnings_history(sb_earnings_history, sb_result["assignments"])
+
+    if return_trace:
+        return {
+            "window_id": window_id,
+            "riders": riders,
+            "drivers": drivers,
+            "joint_opt_assignments": [[rid, did, pr] for rid, did, pr in jo_result["assignments"]],
+            "seq_baseline_assignments": [[rid, did, pr] for rid, did, pr in sb_result["assignments"]],
+            "joint_opt_wait_time": jo_w,
+            "joint_opt_earnings_variance": jo_ev,
+            "joint_opt_price_deviation": jo_pd,
+            "joint_opt_matching_rate": jo_mr,
+            "joint_opt_solve_time": jo_result["solve_time_sec"],
+            "joint_opt_solver_status": jo_result["solver_status"],
+            "seq_baseline_wait_time": sb_w,
+            "seq_baseline_earnings_variance": sb_ev,
+            "seq_baseline_price_deviation": sb_pd,
+            "seq_baseline_matching_rate": sb_mr,
+            "seq_baseline_solve_time": sb_result["solve_time_sec"],
+        }
+    return None
+
+
+def _compile_summary_metrics(
+    jo_metrics: dict[str, list[float]],
+    sb_metrics: dict[str, list[float]],
+) -> dict[str, float]:
+    """Compile average summary statistics and calculate improvement percentages."""
+    def _avg(values: list[float]) -> float:
+        return sum(values) / max(len(values), 1)
+
+    jo_avg_wait, sb_avg_wait = _avg(jo_metrics["wait_times"]), _avg(sb_metrics["wait_times"])
+    jo_avg_ev, sb_avg_ev = _avg(jo_metrics["earnings_variances"]), _avg(sb_metrics["earnings_variances"])
+    jo_avg_pd, sb_avg_pd = _avg(jo_metrics["price_deviations"]), _avg(sb_metrics["price_deviations"])
+    jo_avg_mr, sb_avg_mr = _avg(jo_metrics["matching_rates"]), _avg(sb_metrics["matching_rates"])
+    jo_avg_st, sb_avg_st = _avg(jo_metrics["solve_times"]), _avg(sb_metrics["solve_times"])
+
+    return {
+        "joint_opt_avg_wait": jo_avg_wait,
+        "seq_baseline_avg_wait": sb_avg_wait,
+        "wait_time_improvement_pct": _safe_improvement_pct(sb_avg_wait, jo_avg_wait),
+        "joint_opt_avg_earnings_variance": jo_avg_ev,
+        "seq_baseline_avg_earnings_variance": sb_avg_ev,
+        "earnings_variance_improvement_pct": _safe_improvement_pct(sb_avg_ev, jo_avg_ev),
+        "joint_opt_avg_price_deviation": jo_avg_pd,
+        "seq_baseline_avg_price_deviation": sb_avg_pd,
+        "price_deviation_improvement_pct": _safe_improvement_pct(sb_avg_pd, jo_avg_pd),
+        "joint_opt_avg_matching_rate": jo_avg_mr,
+        "seq_baseline_avg_matching_rate": sb_avg_mr,
+        "matching_rate_improvement_pct": _safe_improvement_pct(
+            sb_avg_mr, jo_avg_mr, higher_is_better=True
+        ),
+        "joint_opt_avg_solve_time": jo_avg_st,
+        "seq_baseline_avg_solve_time": sb_avg_st,
+    }
+
+
 def _execute_simulation(
     num_windows: int = 10,
     riders_per_window: tuple[int, int] = (15, 30),
     drivers_per_window: tuple[int, int] = (20, 35),
-    delta: float = 0.10,
-    fairness_tolerance: float = 0.30,
-    num_zones: int = 10,
+    delta: float = DEFAULT_DELTA,
+    fairness_tolerance: float = DEFAULT_FAIRNESS_TOLERANCE,
+    num_zones: int = DEFAULT_NUM_ZONES,
     seed: int = 42,
     return_trace: bool = False,
 ) -> dict[str, Any]:
-    """
-    Core simulation runner that handles both summary execution and detailed traces.
-    """
+    """Core simulation runner that handles execution and detailed traces."""
     master_rng = np.random.default_rng(seed)
-
-    # Build city graph once (reused across all windows)
     city_graph = build_city_graph(num_zones=num_zones, seed=seed)
 
-    # Serialize graph topology if trace requested
     graph_data = None
     if return_trace:
         graph_data = {
@@ -173,211 +359,28 @@ def _execute_simulation(
             ],
         }
 
-    # Independent state for each system
-    jo_price_memory: dict = {}
-    jo_earnings_history: dict = {}
-    sb_price_memory: dict = {}
-    sb_earnings_history: dict = {}
-
-    # Per-window metric storage
-    jo_metrics: dict[str, list] = {
-        "wait_times": [],
-        "earnings_variances": [],
-        "price_deviations": [],
-        "matching_rates": [],
-        "solve_times": [],
-    }
-    sb_metrics: dict[str, list] = {
-        "wait_times": [],
-        "earnings_variances": [],
-        "price_deviations": [],
-        "matching_rates": [],
-        "solve_times": [],
-    }
-
-    window_traces: list[dict] = []
+    jo_price_memory, jo_earnings_history = {}, {}
+    sb_price_memory, sb_earnings_history = {}, {}
+    jo_metrics = _init_metrics_storage()
+    sb_metrics = _init_metrics_storage()
+    window_traces: list[dict[str, Any]] = []
 
     for window_id in range(num_windows):
-        # Derive a per-window seed for reproducibility
         window_seed = int(master_rng.integers(0, 2**31))
-
-        # 1. Generate rider/driver data for this window
-        win_rng = np.random.default_rng(window_seed)
-        num_riders = int(win_rng.integers(riders_per_window[0], riders_per_window[1] + 1))
-        num_drivers = int(win_rng.integers(drivers_per_window[0], drivers_per_window[1] + 1))
-
-        riders, drivers = generate_time_window_data(
-            num_riders=num_riders,
-            num_drivers=num_drivers,
-            num_zones=num_zones,
-            seed=window_seed + 1,  # offset to avoid RNG correlation with win_rng
+        trace = _run_single_window_simulation(
+            window_seed, window_id, riders_per_window, drivers_per_window,
+            num_zones, city_graph, jo_price_memory, jo_earnings_history,
+            sb_price_memory, sb_earnings_history, delta, fairness_tolerance,
+            jo_metrics, sb_metrics, return_trace
         )
+        if trace is not None:
+            window_traces.append(trace)
 
-        # 2. Build feasibility graph (shared input for both systems)
-        feas_graph = build_feasibility_graph(riders, drivers, city_graph)
-
-        # ── 3. Run JointOpt ──────────────────────────────────────────────────
-        try:
-            jo_result = solve_joint_opt(
-                feasibility_graph=feas_graph,
-                price_memory=jo_price_memory,
-                earnings_history=jo_earnings_history,
-                delta=delta,
-                fairness_tolerance=fairness_tolerance,
-                window_id=window_id,
-            )
-        except Exception as exc:
-            # Graceful failure: treat as error to trigger fallback
-            print(f"[WARN] JointOpt failed on window {window_id} with exception: {exc}")
-            jo_result = {
-                "assignments": [],
-                "total_wait_cost": 0.0,
-                "matched_count": 0,
-                "solver_status": "Error",
-                "solve_time_sec": 0.0,
-            }
-
-        # Handle non-success solver status and apply Hierarchical Fallback:
-        # If solver failed even after internal relaxations, fall back to SeqBaseline
-        if jo_result["solver_status"] not in ("Optimal", "Feasible", "Relaxed"):
-            print(f"[WARN] JointOpt status {jo_result['solver_status']} on window {window_id}. "
-                  f"Falling back to SeqBaseline.")
-            
-            fallback_res = solve_sequential_baseline(
-                riders=riders,
-                drivers=drivers,
-                city_graph=city_graph,
-                price_memory=jo_price_memory,
-            )
-            jo_result = {
-                "assignments": fallback_res["assignments"],
-                "total_wait_cost": fallback_res["total_wait_cost"],
-                "matched_count": fallback_res["matched_count"],
-                "solver_status": "Fallback",
-                "solve_time_sec": fallback_res["solve_time_sec"],
-            }
-
-        # ── 4. Run SeqBaseline ───────────────────────────────────────────────
-        sb_result = solve_sequential_baseline(
-            riders=riders,
-            drivers=drivers,
-            city_graph=city_graph,
-            price_memory=sb_price_memory,
-        )
-
-        # ── 5. Compute metrics ───────────────────────────────────────────────
-        jo_wait = compute_wait_time(jo_result["assignments"], feas_graph)
-        jo_ev = compute_earnings_variance(jo_result["assignments"], drivers)
-        jo_pd = compute_price_deviation(
-            jo_result["assignments"], jo_price_memory, riders, delta
-        )
-        jo_mr = compute_matching_rate(jo_result["assignments"], num_riders)
-
-        sb_wait = compute_wait_time(sb_result["assignments"], feas_graph)
-        sb_ev = compute_earnings_variance(sb_result["assignments"], drivers)
-        sb_pd = compute_price_deviation(
-            sb_result["assignments"], sb_price_memory, riders, delta
-        )
-        sb_mr = compute_matching_rate(sb_result["assignments"], num_riders)
-
-        jo_metrics["wait_times"].append(jo_wait)
-        jo_metrics["earnings_variances"].append(jo_ev)
-        jo_metrics["price_deviations"].append(jo_pd)
-        jo_metrics["matching_rates"].append(jo_mr)
-        jo_metrics["solve_times"].append(jo_result["solve_time_sec"])
-
-        sb_metrics["wait_times"].append(sb_wait)
-        sb_metrics["earnings_variances"].append(sb_ev)
-        sb_metrics["price_deviations"].append(sb_pd)
-        sb_metrics["matching_rates"].append(sb_mr)
-        sb_metrics["solve_times"].append(sb_result["solve_time_sec"])
-
-        # ── 6. Update state (independent per system) ─────────────────────────
-        _update_price_memory(jo_price_memory, jo_result["assignments"], riders)
-        _update_earnings_history(jo_earnings_history, jo_result["assignments"])
-
-        _update_price_memory(sb_price_memory, sb_result["assignments"], riders)
-        _update_earnings_history(sb_earnings_history, sb_result["assignments"])
-
-        # ── 7. Per-window trace ─────────────────────────────────────────────
-        if return_trace:
-            window_traces.append({
-                "window_id": window_id,
-                "riders": riders,
-                "drivers": drivers,
-                "joint_opt_assignments": [
-                    [rid, did, price] for rid, did, price in jo_result["assignments"]
-                ],
-                "seq_baseline_assignments": [
-                    [rid, did, price] for rid, did, price in sb_result["assignments"]
-                ],
-                "joint_opt_wait_time": jo_wait,
-                "joint_opt_earnings_variance": jo_ev,
-                "joint_opt_price_deviation": jo_pd,
-                "joint_opt_matching_rate": jo_mr,
-                "joint_opt_solve_time": jo_result["solve_time_sec"],
-                "joint_opt_solver_status": jo_result["solver_status"],
-                "seq_baseline_wait_time": sb_wait,
-                "seq_baseline_earnings_variance": sb_ev,
-                "seq_baseline_price_deviation": sb_pd,
-                "seq_baseline_matching_rate": sb_mr,
-                "seq_baseline_solve_time": sb_result["solve_time_sec"],
-            })
-
-    # ── Build summary statistics ─────────────────────────────────────────────
-
-    def _avg(values: list[float]) -> float:
-        return sum(values) / max(len(values), 1)
-
-    jo_avg_wait = _avg(jo_metrics["wait_times"])
-    sb_avg_wait = _avg(sb_metrics["wait_times"])
-
-    jo_avg_ev = _avg(jo_metrics["earnings_variances"])
-    sb_avg_ev = _avg(sb_metrics["earnings_variances"])
-
-    jo_avg_pd = _avg(jo_metrics["price_deviations"])
-    sb_avg_pd = _avg(sb_metrics["price_deviations"])
-
-    jo_avg_mr = _avg(jo_metrics["matching_rates"])
-    sb_avg_mr = _avg(sb_metrics["matching_rates"])
-
-    jo_avg_st = _avg(jo_metrics["solve_times"])
-    sb_avg_st = _avg(sb_metrics["solve_times"])
-
-    summary = {
-        # Wait time (lower is better)
-        "joint_opt_avg_wait": jo_avg_wait,
-        "seq_baseline_avg_wait": sb_avg_wait,
-        "wait_time_improvement_pct": _safe_improvement_pct(sb_avg_wait, jo_avg_wait),
-        # Earnings variance (lower is better)
-        "joint_opt_avg_earnings_variance": jo_avg_ev,
-        "seq_baseline_avg_earnings_variance": sb_avg_ev,
-        "earnings_variance_improvement_pct": _safe_improvement_pct(sb_avg_ev, jo_avg_ev),
-        # Price deviation (lower is better)
-        "joint_opt_avg_price_deviation": jo_avg_pd,
-        "seq_baseline_avg_price_deviation": sb_avg_pd,
-        "price_deviation_improvement_pct": _safe_improvement_pct(sb_avg_pd, jo_avg_pd),
-        # Matching rate (higher is better)
-        "joint_opt_avg_matching_rate": jo_avg_mr,
-        "seq_baseline_avg_matching_rate": sb_avg_mr,
-        "matching_rate_improvement_pct": _safe_improvement_pct(
-            sb_avg_mr, jo_avg_mr, higher_is_better=True
-        ),
-        # Solve times
-        "joint_opt_avg_solve_time": jo_avg_st,
-        "seq_baseline_avg_solve_time": sb_avg_st,
-    }
-
-    res = {
-        "joint_opt": jo_metrics,
-        "seq_baseline": sb_metrics,
-        "summary": summary,
-    }
-
+    summary = _compile_summary_metrics(jo_metrics, sb_metrics)
+    res = {"joint_opt": jo_metrics, "seq_baseline": sb_metrics, "summary": summary}
     if return_trace:
         res["graph"] = graph_data
         res["windows"] = window_traces
-
     return res
 
 
@@ -385,14 +388,12 @@ def run_simulation(
     num_windows: int = 10,
     riders_per_window: tuple[int, int] = (15, 30),
     drivers_per_window: tuple[int, int] = (20, 35),
-    delta: float = 0.10,
-    fairness_tolerance: float = 0.30,
-    num_zones: int = 10,
+    delta: float = DEFAULT_DELTA,
+    fairness_tolerance: float = DEFAULT_FAIRNESS_TOLERANCE,
+    num_zones: int = DEFAULT_NUM_ZONES,
     seed: int = 42,
 ) -> dict[str, Any]:
-    """
-    Runs the full multi-window simulation for BOTH JointOpt and SeqBaseline.
-    """
+    """Runs the full multi-window simulation for BOTH JointOpt and SeqBaseline."""
     return _execute_simulation(
         num_windows=num_windows,
         riders_per_window=riders_per_window,
@@ -409,15 +410,12 @@ def run_simulation_with_trace(
     num_windows: int = 10,
     riders_per_window: tuple[int, int] = (15, 30),
     drivers_per_window: tuple[int, int] = (20, 35),
-    delta: float = 0.10,
-    fairness_tolerance: float = 0.30,
-    num_zones: int = 10,
+    delta: float = DEFAULT_DELTA,
+    fairness_tolerance: float = DEFAULT_FAIRNESS_TOLERANCE,
+    num_zones: int = DEFAULT_NUM_ZONES,
     seed: int = 42,
 ) -> dict[str, Any]:
-    """
-    Extended simulation that returns the same results as ``run_simulation()``
-    plus full per-window trace data for the frontend dashboard.
-    """
+    """Extended simulation that returns trace data for dashboard visualization."""
     return _execute_simulation(
         num_windows=num_windows,
         riders_per_window=riders_per_window,
@@ -428,6 +426,7 @@ def run_simulation_with_trace(
         seed=seed,
         return_trace=True,
     )
+
 
 
 # ---------------------------------------------------------------------------

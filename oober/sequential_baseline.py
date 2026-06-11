@@ -13,8 +13,12 @@ import networkx as nx
 
 try:
     from .city_graph import get_travel_cost
+    from .feasibility_filter import build_feasibility_graph
+    from .config import DEFAULT_MAX_HOPS
 except ImportError:
     from city_graph import get_travel_cost
+    from feasibility_filter import build_feasibility_graph
+    from config import DEFAULT_MAX_HOPS
 
 __all__ = ["solve_sequential_baseline"]
 
@@ -23,7 +27,7 @@ def _count_drivers_within_hops(
     city_graph: nx.DiGraph,
     drivers: list[dict[str, Any]],
     origin_zone: int,
-    max_hops: int = 2,
+    max_hops: int = DEFAULT_MAX_HOPS,
 ) -> int:
     """
     Count drivers whose zone is reachable from *their* zone to ``origin_zone``
@@ -100,9 +104,12 @@ def solve_sequential_baseline(
     surge_price: dict[tuple[int, int], float] = {}
     for corridor, demand in corridor_demand.items():
         origin_zone = corridor[0]
-        supply = _count_drivers_within_hops(city_graph, drivers, origin_zone, max_hops=2)
+        supply = _count_drivers_within_hops(city_graph, drivers, origin_zone, max_hops=DEFAULT_MAX_HOPS)
         surge_multiplier = max(1.0, demand / max(supply, 1))
         surge_price[corridor] = base_price * surge_multiplier
+
+    # Build the feasibility graph to leverage shared travel costs and candidate filtering
+    feasibility_graph = build_feasibility_graph(riders, drivers, city_graph)
 
     # ── Step 2: Greedy Matching ──────────────────────────────────────────────
 
@@ -125,18 +132,21 @@ def solve_sequential_baseline(
         best_driver = None
         best_cost = float("inf")
 
-        for driver in drivers:
-            if driver["id"] in assigned_driver_ids:
-                continue
-            if driver["maf"] > price:
-                continue
+        r_node = ("rider", rider["id"])
+        if r_node in feasibility_graph:
+            for d_node in feasibility_graph.neighbors(r_node):
+                did = d_node[1]
+                if did in assigned_driver_ids:
+                    continue
+                
+                driver_data = feasibility_graph.nodes[d_node]["data"]
+                if driver_data["maf"] > price:
+                    continue
 
-            travel_cost = get_travel_cost(
-                city_graph, driver["current_zone"], rider["origin_zone"]
-            )
-            if travel_cost < best_cost:
-                best_cost = travel_cost
-                best_driver = driver
+                travel_cost = feasibility_graph[r_node][d_node]["travel_cost"]
+                if travel_cost < best_cost:
+                    best_cost = travel_cost
+                    best_driver = driver_data
 
         if best_driver is not None:
             assignments.append((rider["id"], best_driver["id"], price))
@@ -152,6 +162,7 @@ def solve_sequential_baseline(
         "solver_status": "Greedy",
         "solve_time_sec": solve_time,
     }
+
 
 
 # ---------------------------------------------------------------------------
