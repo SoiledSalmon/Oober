@@ -7,15 +7,21 @@ Step 2: Greedily assign drivers to riders who can afford the surge price.
 """
 
 import time
+from typing import Any
 
 import networkx as nx
 
-from city_graph import get_travel_cost
+try:
+    from .city_graph import get_travel_cost
+except ImportError:
+    from city_graph import get_travel_cost
+
+__all__ = ["solve_sequential_baseline"]
 
 
 def _count_drivers_within_hops(
     city_graph: nx.DiGraph,
-    drivers: list[dict],
+    drivers: list[dict[str, Any]],
     origin_zone: int,
     max_hops: int = 2,
 ) -> int:
@@ -39,11 +45,11 @@ def _count_drivers_within_hops(
 
 
 def solve_sequential_baseline(
-    riders: list[dict],
-    drivers: list[dict],
+    riders: list[dict[str, Any]],
+    drivers: list[dict[str, Any]],
     city_graph: nx.DiGraph,
-    price_memory: dict,
-) -> dict:
+    price_memory: dict[tuple[int, int], float],
+) -> dict[str, Any]:
     """
     Sequential surge-then-match baseline.
 

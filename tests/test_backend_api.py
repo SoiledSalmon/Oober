@@ -111,7 +111,7 @@ class TestBackendAPI(unittest.TestCase):
         response = self.client.post("/api/simulate", json={"seed": -1})
         self.assertEqual(response.status_code, 422)
 
-    @patch("simulation.solve_joint_opt")
+    @patch("oober.simulation.solve_joint_opt")
     def test_simulate_fallback_to_greedy(self, mock_solve_joint_opt):
         """Verify that if the ILP solver fails completely, it falls back to SeqBaseline."""
         mock_solve_joint_opt.return_value = {

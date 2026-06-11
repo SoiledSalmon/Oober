@@ -6,20 +6,23 @@ ILP using PuLP. Solves it to get optimal (rider, driver, price) triples.
 """
 
 import time
+from typing import Any
 
 import numpy as np
 import pulp
 import networkx as nx
 
+__all__ = ["solve_joint_opt"]
+
 
 def solve_joint_opt(
     feasibility_graph: nx.Graph,
-    price_memory: dict,
-    earnings_history: dict,
+    price_memory: dict[tuple[int, int], float],
+    earnings_history: dict[int, float],
     delta: float = 0.10,
     fairness_tolerance: float = 0.30,
     window_id: int = 0
-) -> dict:
+) -> dict[str, Any]:
     """Solve the joint assignment-and-pricing ILP.
 
     Decision variables

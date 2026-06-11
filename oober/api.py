@@ -10,12 +10,18 @@ import os
 # Allow sibling-module imports (city_graph, ilp_engine, etc.) for FastAPI.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+from typing import Any
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from simulation import run_simulation_with_trace
+try:
+    from .simulation import run_simulation_with_trace
+except ImportError:
+    from simulation import run_simulation_with_trace
+
+__all__ = ["app"]
 
 # ---------------------------------------------------------------------------
 # Pydantic models
@@ -54,7 +60,7 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 
 @app.post("/api/simulate")
-def simulate(request: SimulationRequest):
+def simulate(request: SimulationRequest) -> dict[str, Any]:
     """
     Run the multi-window simulation and return full trace data.
 
@@ -73,7 +79,7 @@ def simulate(request: SimulationRequest):
 
 
 @app.get("/api/health")
-def health():
+def health() -> dict[str, str]:
     """Simple health-check endpoint."""
     return {"status": "ok"}
 

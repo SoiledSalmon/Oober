@@ -7,15 +7,20 @@ price that satisfies both the rider's Willingness-To-Pay (WTP) and the
 driver's Minimum Acceptable Fare (MAF). If MAF_d > WTP_r, the pair is
 infeasible and discarded. Returns the bipartite graph of only feasible pairs.
 """
-
+from typing import Any
 import networkx as nx
 
-from city_graph import get_travel_cost
+try:
+    from .city_graph import get_travel_cost
+except ImportError:
+    from city_graph import get_travel_cost
+
+__all__ = ["build_feasibility_graph"]
 
 
 def build_feasibility_graph(
-    riders: list[dict],       # each dict: {id, origin_zone, dest_zone, wtp}
-    drivers: list[dict],      # each dict: {id, current_zone, maf}
+    riders: list[dict[str, Any]],
+    drivers: list[dict[str, Any]],
     city_graph: nx.DiGraph
 ) -> nx.Graph:
     """

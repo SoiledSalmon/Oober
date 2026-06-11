@@ -5,26 +5,45 @@ Generates synthetic demand traces and orchestrates the full multi-window
 simulation loop for both JointOpt and SeqBaseline. Collects per-window metrics.
 """
 
+from typing import Any
 import numpy as np
 
-from city_graph import build_city_graph
-from feasibility_filter import build_feasibility_graph
-from ilp_engine import solve_joint_opt
-from sequential_baseline import solve_sequential_baseline
-from metrics import (
-    compute_wait_time,
-    compute_earnings_variance,
-    compute_price_deviation,
-    compute_matching_rate,
-)
+try:
+    from .city_graph import build_city_graph
+    from .feasibility_filter import build_feasibility_graph
+    from .ilp_engine import solve_joint_opt
+    from .sequential_baseline import solve_sequential_baseline
+    from .metrics import (
+        compute_wait_time,
+        compute_earnings_variance,
+        compute_price_deviation,
+        compute_matching_rate,
+    )
+except ImportError:
+    from city_graph import build_city_graph
+    from feasibility_filter import build_feasibility_graph
+    from ilp_engine import solve_joint_opt
+    from sequential_baseline import solve_sequential_baseline
+    from metrics import (
+        compute_wait_time,
+        compute_earnings_variance,
+        compute_price_deviation,
+        compute_matching_rate,
+    )
+
+__all__ = [
+    "generate_time_window_data",
+    "run_simulation",
+    "run_simulation_with_trace",
+]
 
 
 def generate_time_window_data(
-    num_riders: int,       # e.g., randomly between 15-30 per window
-    num_drivers: int,      # e.g., randomly between 20-35 per window
+    num_riders: int,
+    num_drivers: int,
     num_zones: int = 10,
-    seed: int = None
-) -> tuple[list[dict], list[dict]]:
+    seed: int | None = None
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """
     Generates synthetic riders and drivers for one time window.
 
@@ -84,9 +103,9 @@ def generate_time_window_data(
 
 
 def _update_price_memory(
-    price_memory: dict,
-    assignments: list[tuple],
-    riders: list[dict],
+    price_memory: dict[tuple[int, int], float],
+    assignments: list[tuple[int, int, float]],
+    riders: list[dict[str, Any]],
 ) -> None:
     """Update price_memory in-place from assignments for the current window."""
     rider_lookup = {r["id"]: r for r in riders}
@@ -97,8 +116,8 @@ def _update_price_memory(
 
 
 def _update_earnings_history(
-    earnings_history: dict,
-    assignments: list[tuple],
+    earnings_history: dict[int, float],
+    assignments: list[tuple[int, int, float]],
 ) -> None:
     """Update cumulative earnings_history in-place from assignments."""
     for _rider_id, driver_id, price in assignments:
@@ -127,14 +146,14 @@ def _safe_improvement_pct(
 
 def _execute_simulation(
     num_windows: int = 10,
-    riders_per_window: tuple = (15, 30),
-    drivers_per_window: tuple = (20, 35),
+    riders_per_window: tuple[int, int] = (15, 30),
+    drivers_per_window: tuple[int, int] = (20, 35),
     delta: float = 0.10,
     fairness_tolerance: float = 0.30,
     num_zones: int = 10,
     seed: int = 42,
     return_trace: bool = False,
-) -> dict:
+) -> dict[str, Any]:
     """
     Core simulation runner that handles both summary execution and detailed traces.
     """
@@ -364,13 +383,13 @@ def _execute_simulation(
 
 def run_simulation(
     num_windows: int = 10,
-    riders_per_window: tuple = (15, 30),
-    drivers_per_window: tuple = (20, 35),
+    riders_per_window: tuple[int, int] = (15, 30),
+    drivers_per_window: tuple[int, int] = (20, 35),
     delta: float = 0.10,
     fairness_tolerance: float = 0.30,
     num_zones: int = 10,
     seed: int = 42,
-) -> dict:
+) -> dict[str, Any]:
     """
     Runs the full multi-window simulation for BOTH JointOpt and SeqBaseline.
     """
@@ -388,13 +407,13 @@ def run_simulation(
 
 def run_simulation_with_trace(
     num_windows: int = 10,
-    riders_per_window: tuple = (15, 30),
-    drivers_per_window: tuple = (20, 35),
+    riders_per_window: tuple[int, int] = (15, 30),
+    drivers_per_window: tuple[int, int] = (20, 35),
     delta: float = 0.10,
     fairness_tolerance: float = 0.30,
     num_zones: int = 10,
     seed: int = 42,
-) -> dict:
+) -> dict[str, Any]:
     """
     Extended simulation that returns the same results as ``run_simulation()``
     plus full per-window trace data for the frontend dashboard.

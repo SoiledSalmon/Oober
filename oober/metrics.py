@@ -1,7 +1,35 @@
+"""
+Metrics Module
+
+Computes evaluation metrics for ride-hailing assignments, including wait time,
+driver earnings variance, price deviation, and matching rate.
+"""
+
+from typing import Any
 import numpy as np
+import networkx as nx
+
+__all__ = [
+    "compute_wait_time",
+    "compute_earnings_variance",
+    "compute_price_deviation",
+    "compute_matching_rate",
+]
 
 
-def compute_wait_time(assignments, feasibility_graph):
+def compute_wait_time(
+    assignments: list[tuple[int, int, float]],
+    feasibility_graph: nx.Graph,
+) -> float:
+    """Computes the total wait time (travel cost) for matched pairs.
+
+    Args:
+        assignments: List of matched (rider_id, driver_id, price) triples.
+        feasibility_graph: Bipartite graph containing travel_cost edge attributes.
+
+    Returns:
+        The sum of travel costs for all matches.
+    """
     total_wait = 0.0
 
     for rider_id, driver_id, _ in assignments:
@@ -14,8 +42,19 @@ def compute_wait_time(assignments, feasibility_graph):
     return total_wait
 
 
-def compute_earnings_variance(assignments, drivers):
-    """Variance of per-driver earnings including unmatched drivers (0 earnings)."""
+def compute_earnings_variance(
+    assignments: list[tuple[int, int, float]],
+    drivers: list[dict[str, Any]],
+) -> float:
+    """Variance of per-driver earnings including unmatched drivers (0 earnings).
+
+    Args:
+        assignments: List of matched (rider_id, driver_id, price) triples.
+        drivers: List of driver dictionaries with keys including 'id'.
+
+    Returns:
+        The variance of driver earnings.
+    """
     earnings = {}
 
     for _, driver_id, price in assignments:
@@ -31,12 +70,24 @@ def compute_earnings_variance(assignments, drivers):
 
     return float(np.var(all_earnings))
 
+
 def compute_price_deviation(
-    assignments,
-    price_memory,
-    riders,
-    delta
-):
+    assignments: list[tuple[int, int, float]],
+    price_memory: dict[tuple[int, int], float],
+    riders: list[dict[str, Any]],
+    delta: float,
+) -> float:
+    """Computes the fraction of matched rides violating the price stability delta.
+
+    Args:
+        assignments: List of matched (rider_id, driver_id, price) triples.
+        price_memory: Maps (origin_zone, dest_zone) corridors to previous prices.
+        riders: List of rider dictionaries.
+        delta: Maximum fractional price deviation allowed.
+
+    Returns:
+        The fraction of assignments exceeding delta.
+    """
     rider_lookup = {
         rider['id']: rider
         for rider in riders
@@ -65,7 +116,20 @@ def compute_price_deviation(
 
     return violations / checked if checked else 0.0
 
-def compute_matching_rate(assignments, total_riders):
+
+def compute_matching_rate(
+    assignments: list[tuple[int, int, float]],
+    total_riders: int,
+) -> float:
+    """Computes the match rate (matched riders / total riders).
+
+    Args:
+        assignments: List of matched (rider_id, driver_id, price) triples.
+        total_riders: Total number of riders requesting a ride.
+
+    Returns:
+        The matching rate.
+    """
     if total_riders == 0:
         return 0.0
 
