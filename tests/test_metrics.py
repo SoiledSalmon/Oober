@@ -76,25 +76,25 @@ class TestMetrics(unittest.TestCase):
         # Assignments:
         # Driver 0: earns 40.0
         # Driver 2: earns 70.0
-        # Driver 1: unmatched, earns 0.0
+        # Driver 1: unmatched, earns 0.0 (excluded from matched-only variance)
         assignments = [
             (0, 0, 40.0),
             (2, 2, 70.0)
         ]
         # Total list of drivers has length 3.
-        # Earnings list: [40.0, 0.0, 70.0]
-        # Mean = 110 / 3 = 36.6666...
-        # Population variance = np.var([40.0, 0.0, 70.0], ddof=0)
-        # = ((40-110/3)**2 + (0-110/3)**2 + (70-110/3)**2) / 3
-        # = ((10/3)**2 + (-110/3)**2 + (100/3)**2) / 3
-        # = (100 + 12100 + 10000) / 27 = 22200 / 27 = 822.2222...
-        expected_var = float(np.var([40.0, 0.0, 70.0], ddof=0))
+        # Matched earnings list: [40.0, 70.0]
+        # Mean = 110 / 2 = 55.0
+        # Population variance = np.var([40.0, 70.0], ddof=0)
+        # = ((40-55)**2 + (70-55)**2) / 2
+        # = (225 + 225) / 2 = 225.0
+        expected_var = float(np.var([40.0, 70.0], ddof=0))
         
         try:
             var = compute_earnings_variance(assignments, self.drivers)
             self.assertAlmostEqual(var, expected_var)
         except NotImplementedError:
             self.skipTest("compute_earnings_variance not implemented yet")
+
 
     def test_compute_earnings_variance_empty(self):
         assignments = []

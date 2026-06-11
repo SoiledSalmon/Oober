@@ -46,29 +46,30 @@ def compute_earnings_variance(
     assignments: list[tuple[int, int, float]],
     drivers: list[dict[str, Any]],
 ) -> float:
-    """Variance of per-driver earnings including unmatched drivers (0 earnings).
+    """Variance is computed over matched drivers in the current window.
+
+    Cross-window driver equity is tracked separately via the earnings history
+    record.
 
     Args:
         assignments: List of matched (rider_id, driver_id, price) triples.
         drivers: List of driver dictionaries with keys including 'id'.
 
     Returns:
-        The variance of driver earnings.
+        The variance of driver earnings over matched drivers, or 0.0 if fewer
+        than 2 drivers are matched.
     """
     earnings = {}
 
     for _, driver_id, price in assignments:
         earnings[driver_id] = earnings.get(driver_id, 0) + price
 
-    if not drivers:
+    matched_earnings = list(earnings.values())
+
+    if len(matched_earnings) < 2:
         return 0.0
 
-    # Build earnings list for ALL drivers, unmatched get 0.0
-    all_earnings = [
-        earnings.get(d['id'], 0.0) for d in drivers
-    ]
-
-    return float(np.var(all_earnings))
+    return float(np.var(matched_earnings))
 
 
 def compute_price_deviation(
