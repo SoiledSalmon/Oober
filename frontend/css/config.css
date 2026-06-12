@@ -89,6 +89,14 @@
   text-align: right;
 }
 
+.field-desc {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+  margin-top: -2px;
+  margin-bottom: 2px;
+}
+
 
 /* --- Range Slider --- */
 .range-slider {

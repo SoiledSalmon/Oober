@@ -48,6 +48,7 @@
             <span>Time Windows</span>
             <span class="field-value font-mono" id="val-windows">10</span>
           </label>
+          <div class="field-desc">Number of consecutive batch processing intervals for the simulation run.</div>
           <input
             type="range"
             id="param-windows"
@@ -63,6 +64,7 @@
             <span>Price Stability δ</span>
             <span class="field-value font-mono" id="val-delta">0.10</span>
           </label>
+          <div class="field-desc">Maximum allowed fractional deviation of a corridor's fare from the previous time window to prevent price oscillations.</div>
           <input
             type="range"
             id="param-delta"
@@ -78,6 +80,7 @@
             <span>Fairness Tolerance</span>
             <span class="field-value font-mono" id="val-fairness">0.30</span>
           </label>
+          <div class="field-desc">Bounds individual driver earnings within a target interval around the market average to ensure supply-side equity.</div>
           <input
             type="range"
             id="param-fairness"
@@ -93,6 +96,7 @@
             <span>City Zones</span>
             <span class="field-value font-mono" id="val-zones">10</span>
           </label>
+          <div class="field-desc">Number of discrete geographic zones represented as nodes in the city road network graph.</div>
           <input
             type="range"
             id="param-zones"
@@ -107,6 +111,7 @@
           <label class="field-label" for="param-seed">
             <span>Random Seed</span>
           </label>
+          <div class="field-desc">RNG seed value to ensure exact reproducibility of passenger demands and driver initial locations.</div>
           <input
             type="number"
             id="param-seed"
@@ -128,11 +133,6 @@
         <div class="progress-bar" aria-hidden="true"></div>
       </button>
 
-      <!-- Project Info -->
-      <div class="config-info">
-        <p class="project-name">DAA PBL Project</p>
-        <p class="team-credit">RV College of Engineering, 2025–26</p>
-      </div>
     </div>
   </div>
 
@@ -232,6 +232,32 @@
         </div>
         <div class="graph-svg-wrap" id="graph-joint">
           <svg id="svg-joint" aria-label="JointOpt city graph visualization"></svg>
+          <div class="graph-legend">
+            <div class="legend-item">
+              <span class="legend-dot matched-rider"></span>
+              <span>Matched Rider</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-dot unmatched-rider"></span>
+              <span>Unmatched Rider</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-dot matched-driver"></span>
+              <span>Matched Driver</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-dot unmatched-driver"></span>
+              <span>Unmatched Driver</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-line matched-edge"></span>
+              <span>Matched Edge</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-line feasible-edge"></span>
+              <span>Feasible Edge</span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -242,6 +268,32 @@
         </div>
         <div class="graph-svg-wrap" id="graph-baseline">
           <svg id="svg-baseline" aria-label="SeqBaseline city graph visualization"></svg>
+          <div class="graph-legend">
+            <div class="legend-item">
+              <span class="legend-dot matched-rider"></span>
+              <span>Matched Rider</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-dot unmatched-rider"></span>
+              <span>Unmatched Rider</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-dot matched-driver"></span>
+              <span>Matched Driver</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-dot unmatched-driver"></span>
+              <span>Unmatched Driver</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-line matched-edge"></span>
+              <span>Matched Edge</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-line feasible-edge"></span>
+              <span>Feasible Edge</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>

@@ -1,47 +1,41 @@
 """
-Two-Sided Acceptance Filter (Person A)
+Implements the core two-sided acceptance constraint for candidate filtering.
 
-Implements the core two-sided acceptance constraint from the report.
-For every (rider, driver) candidate pair, checks whether there exists a
-price that satisfies both the rider's Willingness-To-Pay (WTP) and the
-driver's Minimum Acceptable Fare (MAF). If MAF_d > WTP_r, the pair is
-infeasible and discarded. Returns the bipartite graph of only feasible pairs.
+This module is part of the Oober joint price-and-match
+optimisation system. It filters out rider-driver pairs that
+are mutually incompatible based on price thresholds and returns
+a bipartite graph of feasible matches.
 """
 from typing import Any
+
 import networkx as nx
 
 try:
     from .city_graph import get_travel_cost
+    from .type_defs import Driver, Rider
 except ImportError:
     from city_graph import get_travel_cost
+    from type_defs import Driver, Rider
 
 __all__ = ["build_feasibility_graph"]
 
 
-def _add_rider_nodes(graph: nx.Graph, riders: list[dict[str, Any]]) -> None:
+def _add_rider_nodes(graph: nx.Graph, riders: list[Rider]) -> None:
     """Add rider nodes to the bipartite graph."""
     for rider in riders:
-        graph.add_node(
-            ("rider", rider["id"]),
-            bipartite=0,
-            data=rider
-        )
+        graph.add_node(("rider", rider["id"]), bipartite=0, data=rider)
 
 
-def _add_driver_nodes(graph: nx.Graph, drivers: list[dict[str, Any]]) -> None:
+def _add_driver_nodes(graph: nx.Graph, drivers: list[Driver]) -> None:
     """Add driver nodes to the bipartite graph."""
     for driver in drivers:
-        graph.add_node(
-            ("driver", driver["id"]),
-            bipartite=1,
-            data=driver
-        )
+        graph.add_node(("driver", driver["id"]), bipartite=1, data=driver)
 
 
 def _add_feasible_edges(
     graph: nx.Graph,
-    riders: list[dict[str, Any]],
-    drivers: list[dict[str, Any]],
+    riders: list[Rider],
+    drivers: list[Driver],
     city_graph: nx.DiGraph,
 ) -> None:
     """Add feasible edges satisfying the two-sided acceptance condition."""
@@ -50,9 +44,7 @@ def _add_feasible_edges(
             # Two-sided feasibility condition
             if rider["wtp"] >= driver["maf"]:
                 travel_cost = get_travel_cost(
-                    city_graph,
-                    driver["current_zone"],
-                    rider["origin_zone"]
+                    city_graph, driver["current_zone"], rider["origin_zone"]
                 )
                 graph.add_edge(
                     ("rider", rider["id"]),
@@ -61,17 +53,14 @@ def _add_feasible_edges(
                     price_lb=driver["maf"],
                     price_ub=rider["wtp"],
                     origin_zone=rider["origin_zone"],
-                    dest_zone=rider["dest_zone"]
+                    dest_zone=rider["dest_zone"],
                 )
 
 
 def build_feasibility_graph(
-    riders: list[dict[str, Any]],
-    drivers: list[dict[str, Any]],
-    city_graph: nx.DiGraph
+    riders: list[Rider], drivers: list[Driver], city_graph: nx.DiGraph
 ) -> nx.Graph:
-    """
-    Builds a bipartite graph G = (R ∪ D, E).
+    """Builds a bipartite graph G = (R ∪ D, E).
 
     Nodes:
       - Rider nodes labeled as ('rider', rider_id)
@@ -89,15 +78,15 @@ def build_feasibility_graph(
       - 'price_ub': riders[r]['wtp']
 
     Args:
-        riders: List of rider dictionaries.
-        drivers: List of driver dictionaries.
+        riders: List of Rider dictionaries.
+        drivers: List of Driver dictionaries.
         city_graph: City graph with travel costs.
 
     Returns:
-        nx.Graph (bipartite)
+        nx.Graph: Bipartite graph representing feasible matches.
     """
-    G = nx.Graph()
-    _add_rider_nodes(G, riders)
-    _add_driver_nodes(G, drivers)
-    _add_feasible_edges(G, riders, drivers, city_graph)
-    return G
+    graph = nx.Graph()
+    _add_rider_nodes(graph, riders)
+    _add_driver_nodes(graph, drivers)
+    _add_feasible_edges(graph, riders, drivers, city_graph)
+    return graph

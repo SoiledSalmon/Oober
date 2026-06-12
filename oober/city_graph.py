@@ -1,10 +1,9 @@
 """
-City Graph Module (Person B)
+Represents the service area as a weighted directed graph.
 
-Represents the service area as a weighted directed graph. Nodes are zones
-(e.g., Zone 0-9). Edge weights are travel costs (proxy for travel time).
-Exposes a travel cost query function used by the ILP engine to populate
-bipartite edge weights.
+This module is part of the Oober joint price-and-match
+optimisation system. It builds a synthetic representation
+of the city zones and computes shortest path travel costs.
 """
 
 import networkx as nx
@@ -12,20 +11,44 @@ import numpy as np
 
 __all__ = ["build_city_graph", "get_travel_cost"]
 
+# Constants
+RANDOM_OUTGOING_EDGE_DENSITY_MIN = 3  # Minimum number of outgoing edges per node
+RANDOM_OUTGOING_EDGE_DENSITY_MAX = (
+    6  # Maximum number of outgoing edges per node (exclusive)
+)
+RANDOM_COST_BOUND_MIN = 5  # Lower bound for random travel cost
+RANDOM_COST_BOUND_MAX = 51  # Upper bound for random travel cost (exclusive)
+SCC_BRIDGE_COST_MIN = 40  # Lower bound for SCC bridging travel cost
+SCC_BRIDGE_COST_MAX = (
+    51  # Upper bound for SCC bridging travel cost (exclusive)
+)
+FALLBACK_TRAVEL_COST = 999.0  # Fallback travel cost when no valid path is found
 
-def _add_random_edges(graph: nx.DiGraph, num_zones: int, rng: np.random.Generator) -> None:
+
+def _add_random_edges(
+    graph: nx.DiGraph, num_zones: int, rng: np.random.Generator
+) -> None:
     """Add random outgoing edges (3 to 5 per node) with travel costs in [5, 50]."""
     for node in range(num_zones):
-        num_edges = int(rng.integers(3, 6))
+        num_edges = int(
+            rng.integers(
+                RANDOM_OUTGOING_EDGE_DENSITY_MIN,
+                RANDOM_OUTGOING_EDGE_DENSITY_MAX,
+            )
+        )
         possible_targets = [z for z in range(num_zones) if z != node]
         num_edges = min(num_edges, len(possible_targets))
         targets = rng.choice(possible_targets, size=num_edges, replace=False)
         for target in targets:
-            cost = float(rng.integers(5, 51))  # uniform in [5, 50]
+            cost = float(
+                rng.integers(RANDOM_COST_BOUND_MIN, RANDOM_COST_BOUND_MAX)
+            )  # uniform in [5, 50]
             graph.add_edge(node, int(target), cost=cost)
 
 
-def _ensure_strong_connectivity(graph: nx.DiGraph, rng: np.random.Generator) -> None:
+def _ensure_strong_connectivity(
+    graph: nx.DiGraph, rng: np.random.Generator
+) -> None:
     """Guarantee reachability between all nodes by bridging SCCs with higher cost edges."""
     if not nx.is_strongly_connected(graph):
         sccs = list(nx.strongly_connected_components(graph))
@@ -34,7 +57,9 @@ def _ensure_strong_connectivity(graph: nx.DiGraph, rng: np.random.Generator) -> 
             src = representatives[i]
             dst = representatives[(i + 1) % len(representatives)]
             if not graph.has_edge(src, dst):
-                cost = float(rng.integers(40, 51))  # higher cost for bridges
+                cost = float(
+                    rng.integers(SCC_BRIDGE_COST_MIN, SCC_BRIDGE_COST_MAX)
+                )  # higher cost for bridges
                 graph.add_edge(src, dst, cost=cost)
 
 
@@ -67,7 +92,9 @@ def build_city_graph(num_zones: int = 10, seed: int = 42) -> nx.DiGraph:
     return graph
 
 
-def get_travel_cost(graph: nx.DiGraph, origin_zone: int, dest_zone: int) -> float:
+def get_travel_cost(
+    graph: nx.DiGraph, origin_zone: int, dest_zone: int
+) -> float:
     """
     Returns shortest-path travel cost from origin_zone to dest_zone.
 
@@ -86,11 +113,15 @@ def get_travel_cost(graph: nx.DiGraph, origin_zone: int, dest_zone: int) -> floa
         return 0.0
 
     try:
-        return float(nx.shortest_path_length(graph, origin_zone, dest_zone, weight="cost"))
+        return float(
+            nx.shortest_path_length(
+                graph, origin_zone, dest_zone, weight="cost"
+            )
+        )
     except nx.NetworkXNoPath:
-        return 999.0
+        return FALLBACK_TRAVEL_COST
     except nx.NodeNotFound:
-        return 999.0
+        return FALLBACK_TRAVEL_COST
 
 
 # ---------------------------------------------------------------------------

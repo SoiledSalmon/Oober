@@ -1,10 +1,16 @@
-"""Centralized configuration settings for the Oober project."""
+"""
+Centralized configuration settings for the Oober project.
+
+This module is part of the Oober joint price-and-match
+optimisation system. It defines the constants and configuration
+variables used throughout the codebase.
+"""
 
 # Optimization Defaults
 DEFAULT_DELTA: float = 0.10
 DEFAULT_FAIRNESS_TOLERANCE: float = 0.30
 DEFAULT_NUM_ZONES: int = 10
-DEFAULT_MAX_HOPS: int = 2
+DEFAULT_MAX_HOPS: int = 0
 
 # ILP Solver settings
 SOLVER_TIME_LIMIT: int = 30

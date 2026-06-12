@@ -1,26 +1,32 @@
 """
 Launcher script for the Oober JointOpt Dashboard.
 
-Usage:
-    python run.py
-
-Starts the FastAPI server with auto-reload on port 8000.
+This module is part of the Oober joint price-and-match
+optimisation system. It launches the FastAPI development server
+using uvicorn.
 """
 
+import os
 import subprocess
 import sys
-import os
+
+DEFAULT_HOST = "0.0.0.0"  # Default host address for the FastAPI backend
+DEFAULT_PORT = "8000"  # Default port number for the FastAPI backend
 
 project_root = os.path.dirname(os.path.abspath(__file__))
 
 sys.exit(
     subprocess.call(
         [
-            sys.executable, "-m", "uvicorn",
+            sys.executable,
+            "-m",
+            "uvicorn",
             "oober.api:app",
             "--reload",
-            "--host", "0.0.0.0",
-            "--port", "8000",
+            "--host",
+            DEFAULT_HOST,
+            "--port",
+            DEFAULT_PORT,
         ],
         cwd=project_root,
     )

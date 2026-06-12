@@ -334,17 +334,44 @@
     drivers.forEach(function (d, idx) {
       var zonePos = getZonePos(graphKey, d.current_zone);
       var pos = jitter(zonePos, idx + riders.length, drivers.length);
+      var color = matchedDrivers[d.id] ? '#10b981' : '#475569';
 
       var circle = g.agentLayer.append('circle')
         .attr('cx', pos.x)
         .attr('cy', pos.y)
         .attr('r', DRIVER_SIZE)
-        .attr('fill', '#10b981')
+        .attr('fill', color)
         .attr('opacity', 0)
         .attr('class', 'driver-dot')
         .attr('data-driver-id', d.id);
 
       driverDots.push({ el: circle.node(), pos: pos, driver: d });
+    });
+
+    // Draw unmatched feasible edges (bipartite relations where rider WTP >= driver MAF and they are not matched together)
+    var unmatchedFeasibleLines = [];
+    var matchedPairMap = {};
+    assignments.forEach(function (a) {
+      matchedPairMap[a[0] + '-' + a[1]] = true;
+    });
+
+    riders.forEach(function (r) {
+      drivers.forEach(function (d) {
+        if (r.wtp >= d.maf && !matchedPairMap[r.id + '-' + d.id]) {
+          var riderDot = riderDots.find(function (rd) { return rd.rider.id === r.id; });
+          var driverDot = driverDots.find(function (dd) { return dd.driver.id === d.id; });
+          if (riderDot && driverDot) {
+            var line = g.matchLayer.append('line')
+              .attr('x1', driverDot.pos.x)
+              .attr('y1', driverDot.pos.y)
+              .attr('x2', riderDot.pos.x)
+              .attr('y2', riderDot.pos.y)
+              .attr('class', 'feasible-edge')
+              .attr('opacity', 0);
+            unmatchedFeasibleLines.push(line.node());
+          }
+        }
+      });
     });
 
     // Build anime.js timeline
@@ -373,6 +400,15 @@
         duration: spawn,
         delay: anime.stagger(Math.min(25, spawn / driverDots.length))
       }, '-=' + Math.round(spawn * 0.6));
+    }
+
+    // Phase 1.5: Spawn unmatched feasible lines
+    if (unmatchedFeasibleLines.length > 0) {
+      tl.add({
+        targets: unmatchedFeasibleLines,
+        opacity: [0, 0.25],
+        duration: spawn,
+      }, '-=' + Math.round(spawn * 0.4));
     }
 
     // Phase 2: Draw match lines
@@ -409,7 +445,7 @@
       }, offset);
     });
 
-    // Phase 3: Fade unmatched agents
+    // Phase 3: Fade unmatched agents and feasible lines
     var unmatchedRiders = riderDots.filter(function (rd) {
       return !matchedRiders[rd.rider.id];
     });
@@ -427,6 +463,15 @@
         duration: Math.round(match * 0.4),
         easing: 'cubicBezier(0.4, 0, 0.2, 1)'
       }, '-=' + Math.round(match * 0.2));
+    }
+
+    if (unmatchedFeasibleLines.length > 0) {
+      tl.add({
+        targets: unmatchedFeasibleLines,
+        opacity: 0.04,
+        duration: Math.round(match * 0.4),
+        easing: 'cubicBezier(0.4, 0, 0.2, 1)'
+      }, '-=' + Math.round(match * 0.4));
     }
 
     return tl;
